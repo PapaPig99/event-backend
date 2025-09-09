@@ -36,7 +36,7 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     // Swagger/OpenAPI (Spring Boot 3)
-  implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
     //.env
     implementation 'me.paulschwarz:spring-dotenv:3.0.0'
 
