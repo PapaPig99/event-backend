@@ -19,12 +19,15 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 
 @Tag(name = "Events", description = "CRUD สำหรับ Event")
+
 @RestController
 @RequestMapping("/api/events")
 @RequiredArgsConstructor
 public class EventController {
 
     private final EventService service;
+
+    
 
     @Operation(summary = "รายการ Event", description = "คืนรายการแบบสรุป")
     @GetMapping
