@@ -1,33 +1,45 @@
 package com.example.eventproject.controller;
 
-import com.example.eventproject.dto.EventDetailDto;
-import com.example.eventproject.dto.EventSummaryView;
-import com.example.eventproject.dto.EventUpsertDto;
-import com.example.eventproject.service.EventService;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
-import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
-
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-
 import java.net.URI;
 import java.time.LocalDate;
 import java.util.List;
 
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+import com.example.eventproject.dto.EventDetailDto;
+import com.example.eventproject.dto.EventSummaryView;
+import com.example.eventproject.dto.EventUpsertDto;
+import com.example.eventproject.service.EventService;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+
 @Tag(name = "Events", description = "CRUD สำหรับ Event")
+
 @RestController
 @RequestMapping(value = "/api/events", produces = "application/json")
 @RequiredArgsConstructor
 public class EventController {
 
     private final EventService service;
+
+    
 
     @Operation(summary = "รายการ Event", description = "คืนรายการแบบสรุป พร้อมตัวกรอง")
     @GetMapping

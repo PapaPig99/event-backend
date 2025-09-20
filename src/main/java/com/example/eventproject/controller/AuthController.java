@@ -6,33 +6,24 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.example.eventproject.dto.*;
+import com.example.eventproject.service.AuthService;
+
 @Tag(name = "Auth", description = "Authentication & Users")
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/auth")
 public class AuthController {
-
-    @Operation(summary = "Login และรับ JWT")
-    @PostMapping("/auth/login")
-    public ResponseEntity<?> login(@RequestBody Object body) {
-        // TODO: implement
-        return ResponseEntity.ok().build();
+    private final AuthService auth;
+    public AuthController(AuthService auth){ this.auth = auth; }
+    
+    @Operation(summary = "Register")
+    @PostMapping("/register")
+    public ResponseEntity<AuthResponse> register(@RequestBody RegisterRequest req){
+        return ResponseEntity.ok(auth.register(req));
     }
-
-    @Operation(summary = "Logout (ทำให้ token ใช้ไม่ได้)", security = @SecurityRequirement(name = "bearerAuth"))
-    @PostMapping("/auth/logout")
-    public ResponseEntity<Void> logout() {
-        return ResponseEntity.noContent().build();
-    }
-
-    @Operation(summary = "สมัครผู้ใช้ใหม่")
-    @PostMapping("/auth/register")
-    public ResponseEntity<?> register(@RequestBody Object body) {
-        return ResponseEntity.status(201).build();
-    }
-
-    @Operation(summary = "ข้อมูลผู้ใช้ที่ล็อกอิน", security = @SecurityRequirement(name = "bearerAuth"))
-    @GetMapping("/users/me")
-    public ResponseEntity<?> me() {
-        return ResponseEntity.ok().build();
+    @Operation(summary = "Login")
+    @PostMapping("/login")
+    public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest req){
+        return ResponseEntity.ok(auth.login(req));
     }
 }
