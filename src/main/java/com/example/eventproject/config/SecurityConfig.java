@@ -47,11 +47,10 @@ public class SecurityConfig {
                                 "/api/auth/**",
                                 "/api/events/**",
                                 "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
-                                "/actuator/**"
-                        ).permitAll()
+                                "/actuator/**")
+                        .permitAll()
                         .requestMatchers(HttpMethod.GET, "/images/**").permitAll()
-                        .anyRequest().authenticated()
-                )
+                        .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((req, res, e) -> {
                             res.setStatus(401);
@@ -62,11 +61,25 @@ public class SecurityConfig {
                             res.setStatus(403);
                             res.setContentType("application/json");
                             res.getWriter().write("{\"error\":\"Forbidden\"}");
-                        })
-                )
+                        }))
                 .addFilterBefore(jwtAuthFilter(), UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        var cfg = new org.springframework.web.cors.CorsConfiguration();
+        // ระบุ origin dev
+        cfg.setAllowedOrigins(java.util.List.of("http://localhost:5173", "http://127.0.0.1:5173"));
+        cfg.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        cfg.setAllowedHeaders(java.util.List.of("*"));
+        cfg.setExposedHeaders(java.util.List.of("Location"));
+        cfg.setAllowCredentials(true);
+
+        var src = new org.springframework.web.cors.UrlBasedCorsConfigurationSource();
+        src.registerCorsConfiguration("/**", cfg);
+        return src;
     }
 
     @Bean
@@ -74,8 +87,8 @@ public class SecurityConfig {
         return new JwtAuthFilter(jwtUtil, userRepo);
     }
 
-    // ถ้ามี CorsConfig.java ที่ประกาศ bean นี้อยู่แล้ว ให้ลบอันใดอันหนึ่ง ไม่งั้นซ้ำ!
-
+    // ถ้ามี CorsConfig.java ที่ประกาศ bean นี้อยู่แล้ว ให้ลบอันใดอันหนึ่ง
+    // ไม่งั้นซ้ำ!
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration cfg) throws Exception {
