@@ -4,7 +4,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import com.example.eventproject.model.Status;
-import java.time.LocalTime;
 
 public record EventDetailDto(
         Integer id,
@@ -17,11 +16,13 @@ public record EventDetailDto(
         LocalDateTime saleStartAt,
         LocalDateTime saleEndAt,
         Boolean saleUntilSoldout,
-        LocalTime doorOpenTime,
+        String doorOpenTime,
+        String description,
         String posterImageUrl,
         String detailImageUrl,
         String seatmapImageUrl,
         List<SessionDto> sessions,
         List<ZoneDto> zones
 ) {}
+
 

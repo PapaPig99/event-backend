@@ -3,7 +3,6 @@ package com.example.eventproject.dto;
 import com.example.eventproject.model.Status;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.List;
 
 public record EventUpsertRequest(
@@ -16,7 +15,8 @@ public record EventUpsertRequest(
         LocalDateTime saleStartAt,
         LocalDateTime saleEndAt,
         Boolean saleUntilSoldout,
-        LocalTime doorOpenTime,
+        String doorOpenTime,
+        String description,
         String posterImageUrl,
         String detailImageUrl,
         String seatmapImageUrl,

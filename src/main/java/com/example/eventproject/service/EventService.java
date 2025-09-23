@@ -49,7 +49,7 @@ public class EventService {
                 e.getId(), e.getTitle(), e.getCategory(), e.getLocation(),
                 e.getStartDate(), e.getEndDate(), e.getStatus(),
                 e.getSaleStartAt(), e.getSaleEndAt(), e.isSaleUntilSoldout(),
-                e.getDoorOpenTime(), e.getPosterImageUrl(), e.getDetailImageUrl(),
+                e.getDoorOpenTime(),e.getDescription(), e.getPosterImageUrl(), e.getDetailImageUrl(),
                 e.getSeatmapImageUrl(), sessions, zones
         );
     }
@@ -163,6 +163,7 @@ public class EventService {
         e.setSaleEndAt(dto.saleEndAt());
         e.setSaleUntilSoldout(Boolean.TRUE.equals(dto.saleUntilSoldout()));
         e.setDoorOpenTime(dto.doorOpenTime());
+        e.setDescription(dto.description());
         e.setCreatedByUserId(dto.createdByUserId());
     }
 

@@ -15,9 +15,10 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // ให้ Spring เสิร์ฟไฟล์ที่ /images/** จากโฟลเดอร์จริง
-        String path = Paths.get(uploadDir).toAbsolutePath().toUri().toString();
+        String abs = Paths.get(uploadDir).toAbsolutePath().normalize().toString();
+        String location = "file:" + (abs.endsWith("/") ? abs : abs + "/"); // ต้องมี "file:" และ "/" ปิดท้าย
         registry.addResourceHandler("/images/**")
-                .addResourceLocations(path);
+                .addResourceLocations(location);
     }
 }
+
