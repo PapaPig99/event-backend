@@ -6,7 +6,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Dashboard", description = "สรุป/รายงานยอดขาย (Admin)")
+@Tag(name = "Dashboard", description = "สรุป/รายงานEvents (Admin)")
 @RestController
 @RequestMapping(value = "/api", produces = "application/json")
 @SecurityRequirement(name = "bearerAuth")
@@ -18,7 +18,7 @@ public class DashboardController {
         return ResponseEntity.ok().build();
     }
 
-    @Operation(summary = "ยอดขายต่ออีเวนต์ (capacity, sold, revenue, pending)")
+    @Operation(summary = "ยอดขายต่ออีเวนต์ (capacity, sold)")
     @GetMapping("/dashboard/sales-progress")
     public ResponseEntity<?> salesProgress() {
         return ResponseEntity.ok().build();

@@ -3,7 +3,6 @@ package com.example.eventproject.model;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -29,7 +28,12 @@ public class Event {
     private LocalDateTime saleStartAt;
     private LocalDateTime saleEndAt;
     private boolean saleUntilSoldout;
-    private LocalTime doorOpenTime;
+
+    @Column(name = "door_open_time")
+    private String doorOpenTime;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
 
     private String posterImageUrl;
     private String detailImageUrl;
@@ -76,8 +80,8 @@ public class Event {
     public boolean isSaleUntilSoldout() { return saleUntilSoldout; }
     public void setSaleUntilSoldout(boolean saleUntilSoldout) { this.saleUntilSoldout = saleUntilSoldout; }
 
-    public LocalTime getDoorOpenTime() { return doorOpenTime; }
-    public void setDoorOpenTime(LocalTime doorOpenTime) { this.doorOpenTime = doorOpenTime; }
+    public String getDoorOpenTime() { return doorOpenTime; }
+    public void setDoorOpenTime(String doorOpenTime) { this.doorOpenTime = doorOpenTime; }
 
     public String getPosterImageUrl() { return posterImageUrl; }
     public void setPosterImageUrl(String posterImageUrl) { this.posterImageUrl = posterImageUrl; }
@@ -100,5 +104,6 @@ public class Event {
     public void setCreatedByUserId(Integer createdByUserId) {
         this.createdByUserId = createdByUserId;
     }
-
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 }
