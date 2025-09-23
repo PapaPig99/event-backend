@@ -49,28 +49,42 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(
             org.springframework.security.config.annotation.web.builders.HttpSecurity http) throws Exception {
+
         http
-                .cors(Customizer.withDefaults()) // ใช้ CORS จาก bean ด้านบน
+                .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // ปล่อย preflight ทุก path
+                        // ปล่อย preflight
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // public endpoints
+
+                        // public สำหรับ auth และ asset
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/images/**").permitAll()
-                        //อนุญาตก่อน
-                        .requestMatchers(HttpMethod.GET,  "/api/events/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/events").permitAll()
-                        .requestMatchers(HttpMethod.PUT,  "/api/events/**").permitAll()
-                        .requestMatchers(HttpMethod.DELETE, "/api/events/**").permitAll()
+
+                        // ✅ อนุญาต "รายการอีเวนต์" เท่านั้น (ต้องอยู่ก่อน rule ถัดไป)
+                        .requestMatchers(HttpMethod.GET, "/api/events", "/api/events/").permitAll()
+
+                        // ❗ รายละเอียดอีเวนต์ ต้องล็อกอิน
+                        .requestMatchers(HttpMethod.GET, "/api/events/**").authenticated()
+
+                        // (แนะนำ) action อื่นๆ ใต้ /api/events/** ให้ต้อง auth เช่นกัน
+                        .requestMatchers(HttpMethod.POST,   "/api/events/**").authenticated()
+                        .requestMatchers(HttpMethod.PUT,    "/api/events/**").authenticated()
+                        .requestMatchers(HttpMethod.PATCH,  "/api/events/**").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/events/**").authenticated()
+
+                        // (ถ้ามี flow จองบัตร/ลงทะเบียนงาน)
+                        // .requestMatchers("/api/registrations/**", "/api/sessions/**").authenticated()
+
                         .requestMatchers("/error").permitAll()
-                        // ที่เหลือต้อง auth
-                        .anyRequest().authenticated());
+                        .anyRequest().authenticated()
+                );
 
         http.addFilterBefore(jwtAuthFilter(), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
+
 
     @Bean
     public JwtAuthFilter jwtAuthFilter() {
