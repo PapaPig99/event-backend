@@ -8,8 +8,5 @@ public record SessionDto(
         Integer id,
         String name,
         LocalTime startTime,
-        LocalTime endTime,
-        Status status,
-        Integer maxParticipants,
-        BigDecimal price
+        Status status
 ) {}
