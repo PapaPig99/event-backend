@@ -14,7 +14,7 @@ public interface EventSessionRepository extends JpaRepository<EventSession, Inte
     // ใช้ตอน GET รายละเอียด (ดึงเป็น DTO ตรง ๆ)
     @Query("""
         select new com.example.eventproject.dto.SessionDto(
-            s.id, s.name, s.startTime, s.endTime, s.status, s.maxParticipants, s.price
+            s.id, s.name, s.startTime, s.status
         )
         from EventSession s
         where s.event.id = :eventId
