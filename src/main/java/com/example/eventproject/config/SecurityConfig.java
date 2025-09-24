@@ -61,18 +61,13 @@ public class SecurityConfig {
                         // public สำหรับ auth และ asset
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/images/**").permitAll()
-
-                        // ✅ อนุญาต "รายการอีเวนต์" เท่านั้น (ต้องอยู่ก่อน rule ถัดไป)
                         .requestMatchers(HttpMethod.GET, "/api/events", "/api/events/").permitAll()
-
-                        // ❗ รายละเอียดอีเวนต์ ต้องล็อกอิน
-                        .requestMatchers(HttpMethod.GET, "/api/events/**").authenticated()
-
+                        .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
                         // (แนะนำ) action อื่นๆ ใต้ /api/events/** ให้ต้อง auth เช่นกัน
-                        .requestMatchers(HttpMethod.POST,   "/api/events/**").authenticated()
-                        .requestMatchers(HttpMethod.PUT,    "/api/events/**").authenticated()
-                        .requestMatchers(HttpMethod.PATCH,  "/api/events/**").authenticated()
-                        .requestMatchers(HttpMethod.DELETE, "/api/events/**").authenticated()
+                        .requestMatchers(HttpMethod.POST,   "/api/events/**").permitAll()
+                        .requestMatchers(HttpMethod.PUT,    "/api/events/**").permitAll()
+                        .requestMatchers(HttpMethod.PATCH,  "/api/events/**").permitAll()
+                        .requestMatchers(HttpMethod.DELETE, "/api/events/**").permitAll()
 
                         // (ถ้ามี flow จองบัตร/ลงทะเบียนงาน)
                         // .requestMatchers("/api/registrations/**", "/api/sessions/**").authenticated()
