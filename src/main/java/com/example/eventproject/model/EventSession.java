@@ -26,18 +26,9 @@ public class EventSession {
     @Column(name = "start_time", nullable = false)
     private LocalTime startTime;
 
-    @Column(name = "end_time")
-    private LocalTime endTime;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Status status = Status.OPEN;   // enum(OPEN, CLOSED)
-
-    @Column(name = "max_participants")
-    private Integer maxParticipants;
-
-    @Column(precision = 10, scale = 2)
-    private BigDecimal price;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -70,17 +61,8 @@ public class EventSession {
     public LocalTime getStartTime() { return startTime; }
     public void setStartTime(LocalTime startTime) { this.startTime = startTime; }
 
-    public LocalTime getEndTime() { return endTime; }
-    public void setEndTime(LocalTime endTime) { this.endTime = endTime; }
-
     public Status getStatus() { return status; }
     public void setStatus(Status status) { this.status = status; }
-
-    public Integer getMaxParticipants() { return maxParticipants; }
-    public void setMaxParticipants(Integer maxParticipants) { this.maxParticipants = maxParticipants; }
-
-    public BigDecimal getPrice() { return price; }
-    public void setPrice(BigDecimal price) { this.price = price; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
