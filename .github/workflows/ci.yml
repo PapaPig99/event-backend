@@ -11,18 +11,42 @@ env:
 
 jobs:
   build_test:
+    name: Build & Unit Test (auto-detect backend dir)
     runs-on: ubuntu-latest
+    # รันในคอนเทนเนอร์ Gradle ตามที่ต้องการ
     container:
       image: gradle:8.7-jdk17
       options: --user root
 
+    # ❗❗ สำคัญ: อย่าใส่ defaults.run.working-directory ที่ระดับ workflow/job
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # กำหนด path ใช้งานเป็นโฟลเดอร์ backend (อิงจากราก repo)
+      - name: Show workspace (debug)
+        run: |
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          ls -la
+          echo "----"
+          if [ -d event-backend ]; then echo "Found ./event-backend"; ls -la event-backend; fi
+          if [ -f gradlew ]; then echo "Found ./gradlew at repo root"; fi
+
+      # ✅ Auto-detect ตำแหน่ง Gradle project: ใช้ ./event-backend ถ้ามี, ไม่งั้นใช้ราก repo (.)
+      - name: Detect backend dir
+        id: detect
+        run: |
+          if [ -f "event-backend/gradlew" ]; then
+            echo "BACKEND_DIR=event-backend" >> $GITHUB_ENV
+          elif [ -f "gradlew" ]; then
+            echo "BACKEND_DIR=." >> $GITHUB_ENV
+          else
+            echo "❌ Cannot find gradlew in repo root or event-backend/"
+            exit 1
+          fi
+          echo "Using BACKEND_DIR=${BACKEND_DIR}"
+
       - name: Make gradlew executable
-        working-directory: event-backend
+        working-directory: ${{ env.BACKEND_DIR }}
         run: chmod +x ./gradlew
 
       - name: Cache Gradle
@@ -31,19 +55,22 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('event-backend/**/gradle.*', 'event-backend/**/gradle-wrapper.properties', 'event-backend/**/build.gradle*') }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle.*', '**/gradle-wrapper.properties', '**/build.gradle*', '**/settings.gradle*') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
 
       - name: Gradle build (with tests)
-        working-directory: event-backend
+        working-directory: ${{ env.BACKEND_DIR }}
         run: ./gradlew clean build --no-daemon
 
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
           name: backend-jar
-          path: event-backend/build/libs/*.jar
+          # รองรับทั้งกรณีอยู่ในราก หรืออยู่ใต้ event-backend/
+          path: |
+            build/libs/*.jar
+            event-backend/build/libs/*.jar
 
 
 
