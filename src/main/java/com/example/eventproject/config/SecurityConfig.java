@@ -28,13 +28,14 @@ public class SecurityConfig {
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
 
+    // ===== CORS =====
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
         cfg.setAllowedOrigins(List.of(
-                "http://localhost:8081",         // prod (containner)
+                "http://localhost:8081",   // frontend on nginx container (prod in compose)
                 "http://127.0.0.1:8081",
-                "http://localhost:5173",    // dev (Vite)
+                "http://localhost:5173",   // vite dev
                 "http://127.0.0.1:5173"
         ));
         cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","OPTIONS","PATCH"));
@@ -47,25 +48,18 @@ public class SecurityConfig {
         return src;
     }
 
-
+    // ===== Security rules =====
     @Bean
-    public SecurityFilterChain securityFilterChain(
-            org.springframework.security.config.annotation.web.builders.HttpSecurity http) throws Exception {
-
+    public SecurityFilterChain securityFilterChain(org.springframework.security.config.annotation.web.builders.HttpSecurity http) throws Exception {
         http
-                .cors(Customizer.withDefaults())
-                .csrf(csrf -> csrf.disable())
-                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        // ปล่อย preflight
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+            .cors(Customizer.withDefaults())
+            .csrf(csrf -> csrf.disable())
+            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                // Preflight
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // ปล่อย Swagger / OpenAPI (springdoc)
-                        .requestMatchers(
-                            "/v3/api-docs/**",
-                            "/swagger-ui/**",
-                            "/swagger-ui.html"
-                        ).permitAll()
+                       
 
                         // (เผื่อใช้ springfox รุ่นเก่า)
                         .requestMatchers(
@@ -85,8 +79,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH,  "/api/events/**").permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/events/**").permitAll()
 
-                        // (ถ้ามี flow จองบัตร/ลงทะเบียนงาน)
-                        // .requestMatchers("/api/registrations/**", "/api/sessions/**").authenticated()
+                // Public auth & assets
+                .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/images/**").permitAll()
 
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
@@ -95,10 +90,10 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 );
 
+
         http.addFilterBefore(jwtAuthFilter(), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
-
 
     @Bean
     public JwtAuthFilter jwtAuthFilter() {
@@ -109,5 +104,4 @@ public class SecurityConfig {
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
-
 }
