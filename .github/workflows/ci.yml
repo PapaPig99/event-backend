@@ -20,9 +20,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ใช้ path สากลที่ Actions map ไว้ให้
-      - name: Set working directory
-        run: echo "WD=$GITHUB_WORKSPACE/event-backend" >> $GITHUB_ENV
+      # กำหนด path ใช้งานเป็นโฟลเดอร์ backend (อิงจากราก repo)
+      - name: Make gradlew executable
+        working-directory: event-backend
+        run: chmod +x ./gradlew
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -34,12 +35,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Make gradlew executable
-        working-directory: ${{ env.WD }}
-        run: chmod +x ./gradlew
-
       - name: Gradle build (with tests)
-        working-directory: ${{ env.WD }}
+        working-directory: event-backend
         run: ./gradlew clean build --no-daemon
 
       - name: Upload JAR
@@ -47,6 +44,7 @@ jobs:
         with:
           name: backend-jar
           path: event-backend/build/libs/*.jar
+
 
 
   docker_build_push:
