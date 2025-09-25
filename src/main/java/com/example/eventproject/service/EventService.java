@@ -37,8 +37,8 @@ public class EventService {
 
         var sessions = e.getSessions().stream()
                 .map(s -> new SessionDto(
-                        s.getId(), s.getName(), s.getStartTime(), s.getEndTime(),
-                        s.getStatus(), s.getMaxParticipants(), s.getPrice()
+                        s.getId(), s.getName(), s.getStartTime(),
+                        s.getStatus()
                 )).toList();
 
         var zones = e.getZones().stream()
@@ -71,10 +71,7 @@ public class EventService {
                 es.setEvent(saved);
                 es.setName(s.name());
                 es.setStartTime(s.startTime());
-                es.setEndTime(s.endTime());
                 es.setStatus(s.status());
-                es.setMaxParticipants(s.maxParticipants());
-                es.setPrice(s.price());
                 sessionRepo.save(es);
             }
         }
@@ -113,10 +110,7 @@ public class EventService {
                 es.setEvent(saved);
                 es.setName(s.name());
                 es.setStartTime(s.startTime());
-                es.setEndTime(s.endTime());
                 es.setStatus(s.status());
-                es.setMaxParticipants(s.maxParticipants());
-                es.setPrice(s.price());
                 sessionRepo.save(es);
             }
         }

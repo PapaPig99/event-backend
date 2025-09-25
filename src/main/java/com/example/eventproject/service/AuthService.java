@@ -5,11 +5,15 @@ import com.example.eventproject.model.Role;
 import com.example.eventproject.model.User;
 import com.example.eventproject.repository.RoleRepository;
 import com.example.eventproject.repository.UserRepository;
-import com.example.eventproject.dto.RegisterRequest; // << ใช้ DTO จาก package dto
-import com.example.eventproject.dto.LoginRequest;    // << เช่นกัน
-import com.example.eventproject.dto.AuthResponse;    // ถ้าคุณมี AuthResponse อยู่ใน dto
+import com.example.eventproject.dto.RegisterRequest;
+import com.example.eventproject.dto.LoginRequest;
+import com.example.eventproject.dto.AuthResponse;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+// ✅ เพิ่ม import สองบรรทัดนี้
+import org.springframework.web.server.ResponseStatusException;
+import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 import java.util.Optional;
 import java.util.Set;
@@ -18,7 +22,7 @@ import java.util.Set;
 public class AuthService {
 
     private final UserRepository users;
-    private final RoleRepository roles;   // ต้องมี ถ้าใช้ตาราง roles
+    private final RoleRepository roles;
     private final PasswordEncoder encoder;
     private final JwtUtil jwt;
 
@@ -30,14 +34,12 @@ public class AuthService {
         this.jwt = jwt;
     }
 
-    // เปลี่ยนให้รับ dto.RegisterRequest โดยตรง และ "ไม่ต้อง" ส่ง Role มาจาก Controller
     public AuthResponse register(RegisterRequest req) {
         String email = req.email().trim().toLowerCase();
         if (users.existsByEmail(email)) {
             throw new IllegalArgumentException("Email already in use");
         }
 
-        // หา role USER (ถ้าไม่เจอ ให้ fallback เป็น USER แบบไม่มี entity)
         Role userRole = roles.findByCode("USER").orElse(null);
 
         User u = new User();
@@ -55,18 +57,33 @@ public class AuthService {
         String roleCode = userRole != null ? userRole.getCode() : "USER";
         String token = jwt.create(u.getEmail(), roleCode);
 
-        // ถ้า AuthResponse อยู่ใน dto ให้ new ตามคอนสตรัคเตอร์ของคุณ
         return new AuthResponse(token, u.getId(), u.getEmail(), u.getName(), roleCode);
     }
 
-    // เปลี่ยนให้รับ dto.LoginRequest โดยตรง
     public AuthResponse login(LoginRequest req) {
         String email = req.email().trim().toLowerCase();
         Optional<User> userOpt = users.findByEmail(email);
-        User u = userOpt.orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
 
-        if (!encoder.matches(req.password(), u.getPassword())) {
-            throw new IllegalArgumentException("Invalid credentials");
+        // ❗เปลี่ยนเป็น 401 แทน 500
+        User u = userOpt.orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "INVALID_CREDENTIALS"));
+
+        String raw = req.password();
+        String stored = u.getPassword();
+        boolean isBcrypt = stored != null && stored.startsWith("$2"); // $2a/$2b/$2y
+
+        // ✅ รองรับทั้ง bcrypt และ plain (กรณี admin ที่ถูก INSERT ตรง ๆ)
+        boolean ok = isBcrypt
+                ? encoder.matches(raw, stored)
+                : raw != null && raw.equals(stored);
+
+        if (!ok) {
+            throw new ResponseStatusException(UNAUTHORIZED, "INVALID_CREDENTIALS");
+        }
+
+        // 🔁 ถ้าเป็น plain และล็อกอินผ่าน → แฮชแล้วบันทึกกลับ (auto-migrate)
+        if (!isBcrypt) {
+            u.setPassword(encoder.encode(stored));
+            users.save(u);
         }
 
         String role = "USER";

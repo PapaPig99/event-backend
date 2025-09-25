@@ -60,24 +60,36 @@ public class SecurityConfig {
                         // ปล่อย preflight
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
+                        // ปล่อย Swagger / OpenAPI (springdoc)
+                        .requestMatchers(
+                            "/v3/api-docs/**",
+                            "/swagger-ui/**",
+                            "/swagger-ui.html"
+                        ).permitAll()
+
+                        // (เผื่อใช้ springfox รุ่นเก่า)
+                        .requestMatchers(
+                            "/v2/api-docs",
+                            "/swagger-resources/**",
+                            "/webjars/**"
+                        ).permitAll()
+
                         // public สำหรับ auth และ asset
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/images/**").permitAll()
-
-                        // ✅ อนุญาต "รายการอีเวนต์" เท่านั้น (ต้องอยู่ก่อน rule ถัดไป)
                         .requestMatchers(HttpMethod.GET, "/api/events", "/api/events/").permitAll()
-
-                        // ❗ รายละเอียดอีเวนต์ ต้องล็อกอิน
-                        .requestMatchers(HttpMethod.GET, "/api/events/**").authenticated()
-
+                        .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
                         // (แนะนำ) action อื่นๆ ใต้ /api/events/** ให้ต้อง auth เช่นกัน
-                        .requestMatchers(HttpMethod.POST,   "/api/events/**").authenticated()
-                        .requestMatchers(HttpMethod.PUT,    "/api/events/**").authenticated()
-                        .requestMatchers(HttpMethod.PATCH,  "/api/events/**").authenticated()
-                        .requestMatchers(HttpMethod.DELETE, "/api/events/**").authenticated()
+                        .requestMatchers(HttpMethod.POST,   "/api/events/**").permitAll()
+                        .requestMatchers(HttpMethod.PUT,    "/api/events/**").permitAll()
+                        .requestMatchers(HttpMethod.PATCH,  "/api/events/**").permitAll()
+                        .requestMatchers(HttpMethod.DELETE, "/api/events/**").permitAll()
 
                         // (ถ้ามี flow จองบัตร/ลงทะเบียนงาน)
                         // .requestMatchers("/api/registrations/**", "/api/sessions/**").authenticated()
+
+                        .requestMatchers("/api/auth/login").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
