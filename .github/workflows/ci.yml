@@ -11,21 +11,18 @@ env:
 
 jobs:
   build_test:
-    name: Build & Unit Test in Docker (Gradle image)
     runs-on: ubuntu-latest
-
-    # ✅ ใช้ docker image config ของ GitHub Actions (รัน job ข้างใน container)
     container:
       image: gradle:8.7-jdk17
-      options: --user root  # เผื่อสิทธิ์เขียน cache
-
-    defaults:
-      run:
-        working-directory: /__w/${{ github.event.repository.name }}/${{ github.event.repository.name }}/event-backend
+      options: --user root
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # ใช้ path สากลที่ Actions map ไว้ให้
+      - name: Set working directory
+        run: echo "WD=$GITHUB_WORKSPACE/event-backend" >> $GITHUB_ENV
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -35,16 +32,22 @@ jobs:
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('event-backend/**/gradle.*', 'event-backend/**/gradle-wrapper.properties', 'event-backend/**/build.gradle*') }}
           restore-keys: |
-            ${!! runner.os}-gradle-
+            ${{ runner.os }}-gradle-
+
+      - name: Make gradlew executable
+        working-directory: ${{ env.WD }}
+        run: chmod +x ./gradlew
 
       - name: Gradle build (with tests)
-        run: gradle clean build --no-daemon
+        working-directory: ${{ env.WD }}
+        run: ./gradlew clean build --no-daemon
 
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
           name: backend-jar
           path: event-backend/build/libs/*.jar
+
 
   docker_build_push:
     name: Build & Push to GHCR
