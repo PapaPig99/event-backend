@@ -29,18 +29,22 @@ jobs:
           if [ -d event-backend ]; then echo "Found ./event-backend"; ls -la event-backend; fi
           if [ -f gradlew ]; then echo "Found ./gradlew at repo root"; fi
 
-      - name: Detect backend dir
-        id: detect
+      - name: Detect backend dir (for Docker)
         run: |
-          if [ -f "event-backend/gradlew" ]; then
-            echo "BACKEND_DIR=event-backend" >> $GITHUB_ENV
-          elif [ -f "gradlew" ]; then
-            echo "BACKEND_DIR=." >> $GITHUB_ENV
+          if [ -f "event-backend/Dockerfile" ]; then
+            BACKEND_DIR="event-backend"
+          elif [ -f "Dockerfile" ]; then
+            BACKEND_DIR="."
           else
-            echo "❌ Cannot find gradlew in repo root or event-backend/"
+            echo "❌ Cannot find Dockerfile in repo root or event-backend/"
+            ls -la
             exit 1
           fi
-          echo "Using BACKEND_DIR=${BACKEND_DIR}"
+
+          # ทำให้ใช้ได้ทั้งในสเต็ปนี้ และสเต็ปถัดไป
+          echo "BACKEND_DIR=$BACKEND_DIR" >> "$GITHUB_ENV"
+          echo "Using BACKEND_DIR=$BACKEND_DIR"
+          ls -la "$BACKEND_DIR"
 
       - name: Make gradlew executable
         working-directory: ${{ env.BACKEND_DIR }}
