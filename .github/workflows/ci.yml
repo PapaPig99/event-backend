@@ -75,41 +75,54 @@ jobs:
 
 
   docker_build_push:
-    name: Build & Push to GHCR
-    needs: build_test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write   # ✅ ต้องมีสำหรับ GHCR
-    outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+  name: Build & Push to GHCR
+  needs: build_test
+  runs-on: ubuntu-latest
+  permissions:
+    contents: read
+    packages: write
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+    # 🔍 ตรวจหา Dockerfile/โฟลเดอร์โปรเจกต์ แบบเดียวกับ job แรก
+    - name: Detect backend dir (for Docker)
+      run: |
+        if [ -f "event-backend/Dockerfile" ]; then
+          echo "BACKEND_DIR=event-backend" >> $GITHUB_ENV
+        elif [ -f "Dockerfile" ]; then
+          echo "BACKEND_DIR=." >> $GITHUB_ENV
+        else
+          echo "❌ Cannot find Dockerfile in repo root or event-backend/"
+          ls -la
+          exit 1
+        fi
+        echo "Using BACKEND_DIR=${BACKEND_DIR}"
+        ls -la "${BACKEND_DIR}"
 
-      - name: Extract metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          # จะได้ tag :sha-<commit> เสมอ และ :latest เฉพาะ main
-          tags: |
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
+    - name: Login to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & Push
-        uses: docker/build-push-action@v6
-        with:
-          context: ./event-backend
-          file: ./event-backend/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+    - name: Extract metadata (tags, labels)
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository }}/event-backend
+        tags: |
+          type=sha
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build & Push
+      uses: docker/build-push-action@v6
+      with:
+        context: ${{ env.BACKEND_DIR }}
+        file: ${{ env.BACKEND_DIR }}/Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+
 
