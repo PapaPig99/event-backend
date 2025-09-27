@@ -1,24 +1,22 @@
-name: CI / Build, Push & E2E (GHCR + Containerized Jobs)
+name: "CI / Build, Push & E2E (GHCR + Containerized Jobs)"
 
 on:
   push:
-    branches: [ main, feat/** ]
+    branches: [ "main", "feat/**" ]
   pull_request:
-    branches: [ main ]
+    branches: [ "main" ]
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}/event-backend
 
 jobs:
   build_test:
-    name: Build & Unit Test (auto-detect backend dir)
+    name: "Build & Unit Test (auto-detect backend dir)"
     runs-on: ubuntu-latest
-    # รันในคอนเทนเนอร์ Gradle ตามที่ต้องการ
     container:
       image: gradle:8.7-jdk17
       options: --user root
 
-    # ❗❗ สำคัญ: อย่าใส่ defaults.run.working-directory ที่ระดับ workflow/job
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,7 +29,6 @@ jobs:
           if [ -d event-backend ]; then echo "Found ./event-backend"; ls -la event-backend; fi
           if [ -f gradlew ]; then echo "Found ./gradlew at repo root"; fi
 
-      # ✅ Auto-detect ตำแหน่ง Gradle project: ใช้ ./event-backend ถ้ามี, ไม่งั้นใช้ราก repo (.)
       - name: Detect backend dir
         id: detect
         run: |
@@ -67,62 +64,57 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-jar
-          # รองรับทั้งกรณีอยู่ในราก หรืออยู่ใต้ event-backend/
           path: |
             build/libs/*.jar
             event-backend/build/libs/*.jar
 
-
-
   docker_build_push:
-  name: Build & Push to GHCR
-  needs: build_test
-  runs-on: ubuntu-latest
-  permissions:
-    contents: read
-    packages: write
-  steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+    name: "Build & Push to GHCR"
+    needs: build_test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
-    # 🔍 ตรวจหา Dockerfile/โฟลเดอร์โปรเจกต์ แบบเดียวกับ job แรก
-    - name: Detect backend dir (for Docker)
-      run: |
-        if [ -f "event-backend/Dockerfile" ]; then
-          echo "BACKEND_DIR=event-backend" >> $GITHUB_ENV
-        elif [ -f "Dockerfile" ]; then
-          echo "BACKEND_DIR=." >> $GITHUB_ENV
-        else
-          echo "❌ Cannot find Dockerfile in repo root or event-backend/"
-          ls -la
-          exit 1
-        fi
-        echo "Using BACKEND_DIR=${BACKEND_DIR}"
-        ls -la "${BACKEND_DIR}"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Login to GHCR
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Detect backend dir (for Docker)
+        run: |
+          if [ -f "event-backend/Dockerfile" ]; then
+            echo "BACKEND_DIR=event-backend" >> $GITHUB_ENV
+          elif [ -f "Dockerfile" ]; then
+            echo "BACKEND_DIR=." >> $GITHUB_ENV
+          else
+            echo "❌ Cannot find Dockerfile in repo root or event-backend/"
+            ls -la
+            exit 1
+          fi
+          echo "Using BACKEND_DIR=${BACKEND_DIR}"
+          ls -la "${BACKEND_DIR}"
 
-    - name: Extract metadata (tags, labels)
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ghcr.io/${{ github.repository }}/event-backend
-        tags: |
-          type=sha
-          type=raw,value=latest,enable={{is_default_branch}}
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Build & Push
-      uses: docker/build-push-action@v6
-      with:
-        context: ${{ env.BACKEND_DIR }}
-        file: ${{ env.BACKEND_DIR }}/Dockerfile
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
 
-
+      - name: Build & Push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.BACKEND_DIR }}
+          file: ${{ env.BACKEND_DIR }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
