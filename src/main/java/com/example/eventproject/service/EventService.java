@@ -12,9 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -25,7 +23,7 @@ public class EventService {
     private final EventZoneRepository zoneRepo;
     private final FileStorageService fileStorageService;
 
-    /* ========== READ (Admin) ========== */
+    /* ========== READ ========== */
 
     @Transactional(readOnly = true)
     public List<EventSummaryView> list() {
@@ -39,7 +37,8 @@ public class EventService {
 
         var sessions = e.getSessions().stream()
                 .map(s -> new SessionDto(
-                        s.getId(), s.getName(), s.getStartTime(), s.getStatus()
+                        s.getId(), s.getName(), s.getStartTime(),
+                        s.getStatus()
                 )).toList();
 
         var zones = e.getZones().stream()
@@ -50,66 +49,9 @@ public class EventService {
                 e.getId(), e.getTitle(), e.getCategory(), e.getLocation(),
                 e.getStartDate(), e.getEndDate(), e.getStatus(),
                 e.getSaleStartAt(), e.getSaleEndAt(), e.isSaleUntilSoldout(),
-                e.getDoorOpenTime(), e.getDescription(),
-                e.getPosterImageUrl(), e.getDetailImageUrl(),
+                e.getDoorOpenTime(),e.getDescription(), e.getPosterImageUrl(), e.getDetailImageUrl(),
                 e.getSeatmapImageUrl(), sessions, zones
         );
-    }
-
-    /* ========== READ (User / Public) ========== */
-    @Transactional(readOnly = true)
-    public EventPublicDto getPublic(Integer id) {
-        Event e = eventRepo.findDetailById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + id));
-
-        EventPublicDto dto = new EventPublicDto();
-        dto.setId(e.getId());
-        dto.setTitle(e.getTitle());
-        dto.setSubtitle(e.getCategory());
-        dto.setVenue(e.getLocation());
-        dto.setBannerUrl(e.getPosterImageUrl());
-        dto.setSeatmapUrl(e.getSeatmapImageUrl());
-        dto.setQuickNotes(List.of(
-                "ประตูเปิดก่อนการแสดง ~ 60 นาที",
-                "บัตร 1 ใบต่อ 1 ที่นั่ง"
-        ));
-        dto.setDescriptionHtml(e.getDescription() != null ? "<p>" + e.getDescription() + "</p>" : "");
-
-        // map sessions → showtimes
-        List<EventPublicDto.ShowtimeDto> showtimes = e.getSessions().stream().map(s -> {
-            EventPublicDto.ShowtimeDto st = new EventPublicDto.ShowtimeDto();
-            st.setId("s" + s.getId());
-            String date = s.getStartTime() != null ? s.getStartTime().toLocalDate().toString() : "";
-            String time = s.getStartTime() != null ? s.getStartTime().toLocalTime().toString() : "";
-            st.setDate(date);
-            st.setTime(time);
-            st.setLabel(s.getName() != null && !s.getName().isBlank()
-                    ? s.getName()
-                    : (date.isEmpty() && time.isEmpty() ? "-" : (date + " • " + time)));
-            return st;
-        }).toList();
-        dto.setShowtimes(showtimes);
-
-        // map zones (สมมติทุก session ใช้ zone เหมือนกัน)
-        List<EventPublicDto.ZoneDto> zoneList = e.getZones().stream().map(z -> {
-            EventPublicDto.ZoneDto zz = new EventPublicDto.ZoneDto();
-            zz.setId("z" + z.getId());
-            zz.setName(z.getName());
-            zz.setPrice(z.getPrice());
-            // เดาสถานะจาก capacity
-            String status = (z.getCapacity() == null || z.getCapacity() > 50) ? "available"
-                    : (z.getCapacity() > 0 ? "few" : "soldout");
-            zz.setStatus(status);
-            return zz;
-        }).toList();
-
-        Map<String, List<EventPublicDto.ZoneDto>> zonesByShow = new LinkedHashMap<>();
-        for (EventPublicDto.ShowtimeDto st : showtimes) {
-            zonesByShow.put(st.getId(), zoneList);
-        }
-        dto.setZonesByShow(zonesByShow);
-
-        return dto;
     }
 
     /* ========== CREATE ========== */
@@ -228,9 +170,11 @@ public class EventService {
             String newUrl = fileStorageService.replaceFile(e.getPosterImageUrl(), poster);
             e.setPosterImageUrl(newUrl);
         } else if (dto.posterImageUrl() == null) {
+            // ผู้ใช้ตั้งใจลบ
             fileStorageService.deleteFile(e.getPosterImageUrl());
             e.setPosterImageUrl(null);
         } else {
+            // ผู้ใช้ส่ง URL เดิม/ใหม่มา (จาก client)
             e.setPosterImageUrl(dto.posterImageUrl());
         }
 
@@ -256,4 +200,5 @@ public class EventService {
             e.setSeatmapImageUrl(dto.seatmapImageUrl());
         }
     }
+
 }
