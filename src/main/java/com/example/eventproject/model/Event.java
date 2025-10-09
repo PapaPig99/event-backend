@@ -38,8 +38,10 @@ public class Event {
     private String posterImageUrl;
     private String detailImageUrl;
     private String seatmapImageUrl;
+
     @Column(name = "created_by_user_id", nullable = false)
     private Integer createdByUserId;
+
     // Relations
     @OneToMany(mappedBy = "event", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("startTime asc")
@@ -49,6 +51,11 @@ public class Event {
     @OrderBy("name asc")
     private Set<EventZone> zones = new LinkedHashSet<>();
 
+    public Event()
+    {}
+    public Event(Integer id) {
+        this.id = id;
+    }
     // --- getter/setter ---
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }

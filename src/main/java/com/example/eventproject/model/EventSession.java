@@ -3,7 +3,6 @@ package com.example.eventproject.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
-import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.time.LocalDateTime;
 
@@ -36,6 +35,12 @@ public class EventSession {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+
+    public EventSession() {}
+
+    public EventSession(Integer id) {
+        this.id = id;
+    }
     // -------- lifecycle --------
     @PrePersist
     protected void onCreate() {

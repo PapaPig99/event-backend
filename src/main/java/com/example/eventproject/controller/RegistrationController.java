@@ -1,40 +1,74 @@
 package com.example.eventproject.controller;
 
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import com.example.eventproject.config.CurrentUser;
+import com.example.eventproject.dto.RegistrationDto;
+import com.example.eventproject.model.Registration;
+import com.example.eventproject.service.RegistrationService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import java.util.List;
 
-@Tag(name = "Registrations", description = "การจอง/ซื้อตั๋ว")
 @RestController
-@RequestMapping(value = "/api", produces = "application/json")
+@RequestMapping("/api/registrations")
+@RequiredArgsConstructor
 public class RegistrationController {
 
-    @Operation(summary = "Hold ที่นั่ง (สร้างรายการจอง)", security = @SecurityRequirement(name = "bearerAuth"))
-    @PostMapping(value = "/registrations", consumes = "application/json")
-    public ResponseEntity<?> create(@RequestBody Object dto,
-                                    @RequestHeader(value = "Idempotency-Key", required = false) String idemKey) {
-        return ResponseEntity.status(201).build();
+    private final RegistrationService registrationService;
+
+    // สร้างการจองใหม่ (PENDING/HOLD)
+    @PostMapping
+    public ResponseEntity<RegistrationDto.Response> create(
+            @RequestBody RegistrationDto.CreateRequest req,
+            @AuthenticationPrincipal CurrentUser user
+    ) {
+        Registration reg = registrationService.create(req, user.getId().intValue());
+        return ResponseEntity.status(201).body(RegistrationDto.Response.from(reg));
     }
 
-    @Operation(summary = "ดูรายการจองของผู้ใช้ที่ล็อกอิน", security = @SecurityRequirement(name = "bearerAuth"))
-    @GetMapping("/registrations/me")
-    public ResponseEntity<?> myRegistrations(@RequestParam(required = false) String status,
-                                             @RequestParam(required = false) String from,
-                                             @RequestParam(required = false) String to) {
-        return ResponseEntity.ok().build();
+    // ยืนยันการจ่ายเงิน (ต้องส่ง id ของ registration)
+    @PatchMapping("/{id}/confirm")
+    public ResponseEntity<RegistrationDto.Response> confirm(
+            @PathVariable Integer id,
+            @RequestBody RegistrationDto.ConfirmRequest req,
+            @AuthenticationPrincipal CurrentUser user
+    ) {
+        // ส่ง id เข้า service ด้วย
+        Registration reg = registrationService.confirm(id, req, user.getId().intValue());
+        return ResponseEntity.ok(RegistrationDto.Response.from(reg));
     }
 
-    @Operation(summary = "ยกเลิกรายการจอง", security = @SecurityRequirement(name = "bearerAuth"))
-    @PatchMapping(value = "/registrations/{id}/cancel", consumes = "application/json")
-    public ResponseEntity<?> cancel(@PathVariable Integer id, @RequestBody(required = false) Object body) {
-        return ResponseEntity.ok().build();
+    // ยกเลิกการจอง (ต้องส่ง id ของ registration)
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<RegistrationDto.Response> cancel(
+            @PathVariable Integer id,
+            @RequestBody(required = false) RegistrationDto.CancelRequest req,
+            @AuthenticationPrincipal CurrentUser user
+    ) {
+        // ส่ง id เข้า service ด้วย
+        Registration reg = registrationService.cancel(id, req, user.getId().intValue());
+        return ResponseEntity.ok(RegistrationDto.Response.from(reg));
     }
 
-    @Operation(summary = "ยืนยันหลังจ่ายเงินสำเร็จ", security = @SecurityRequirement(name = "bearerAuth"))
-    @PatchMapping(value = "/registrations/{id}/confirm", consumes = "application/json")
-    public ResponseEntity<?> confirm(@PathVariable Integer id, @RequestBody Object body) {
-        return ResponseEntity.ok().build();
+    // ดึงรายการจองของตัวเองทุก event
+    @GetMapping("/me")
+    public ResponseEntity<?> myRegs(
+            @AuthenticationPrincipal CurrentUser user,
+            @RequestParam(required = false) String status
+    ) {
+        return ResponseEntity.ok(
+                registrationService.getByUserId(user.getId().intValue(), status)
+        );
     }
+    // ดึงรายการจองของทุกuserที่จ่ายตังแล้ว ตามevent
+    @GetMapping("/event/{eventId}")
+    public ResponseEntity<List<RegistrationDto.Response>> getAllByEvent(
+            @PathVariable Integer eventId,
+            @RequestParam(required = false) String status
+    ) {
+        var result = registrationService.getAllByEvent(eventId, status);
+        return ResponseEntity.ok(result);
+    }
+
 }
