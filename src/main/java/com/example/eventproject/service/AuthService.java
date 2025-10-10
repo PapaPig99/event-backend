@@ -1,22 +1,21 @@
 package com.example.eventproject.service;
 
+import java.util.Optional;
+import java.util.Set;
+
+import static org.springframework.http.HttpStatus.UNAUTHORIZED;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
 import com.example.eventproject.config.JwtUtil;
+import com.example.eventproject.dto.AuthResponse;
+import com.example.eventproject.dto.LoginRequest;
+import com.example.eventproject.dto.RegisterRequest;
 import com.example.eventproject.model.Role;
 import com.example.eventproject.model.User;
 import com.example.eventproject.repository.RoleRepository;
 import com.example.eventproject.repository.UserRepository;
-import com.example.eventproject.dto.RegisterRequest;
-import com.example.eventproject.dto.LoginRequest;
-import com.example.eventproject.dto.AuthResponse;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-
-// ✅ เพิ่ม import สองบรรทัดนี้
-import org.springframework.web.server.ResponseStatusException;
-import static org.springframework.http.HttpStatus.UNAUTHORIZED;
-
-import java.util.Optional;
-import java.util.Set;
 
 @Service
 public class AuthService {
@@ -35,7 +34,10 @@ public class AuthService {
     }
 
     public AuthResponse register(RegisterRequest req) {
-        String email = req.email().trim().toLowerCase();
+        String email = (req.email() == null ? "" : req.email()).trim().toLowerCase();
+        if (email.isEmpty()) {
+            throw new IllegalArgumentException("Email is required");
+        }
         if (users.existsByEmail(email)) {
             throw new IllegalArgumentException("Email already in use");
         }
@@ -61,37 +63,41 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest req) {
-        String email = req.email().trim().toLowerCase();
-        Optional<User> userOpt = users.findByEmail(email);
+        String email = (req.email() == null ? "" : req.email()).trim().toLowerCase();
+        String raw = req.password() == null ? "" : req.password();
 
-        // ❗เปลี่ยนเป็น 401 แทน 500
+        Optional<User> userOpt = users.findByEmail(email);
         User u = userOpt.orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "INVALID_CREDENTIALS"));
 
-        String raw = req.password();
-        String stored = u.getPassword();
-        boolean isBcrypt = stored != null && stored.startsWith("$2"); // $2a/$2b/$2y
+        String stored = u.getPassword() == null ? "" : u.getPassword();
 
-        // ✅ รองรับทั้ง bcrypt และ plain (กรณี admin ที่ถูก INSERT ตรง ๆ)
-        boolean ok = isBcrypt
-                ? encoder.matches(raw, stored)
-                : raw != null && raw.equals(stored);
+        // ตรวจว่าเป็น BCrypt จริง ๆ ($2a/$2b/$2y)
+        boolean isBcrypt = stored.startsWith("$2a$") || stored.startsWith("$2b$") || stored.startsWith("$2y$");
+
+        boolean ok;
+        if (isBcrypt) {
+            ok = encoder.matches(raw, stored);
+        } else {
+            // legacy: plaintext ใน DB → เทียบตรง 1 ครั้ง
+            ok = !stored.isEmpty() && stored.equals(raw);
+            // ถ้าเทียบตรงผ่าน → อัปเกรดเป็น BCrypt ทันที
+            if (ok) {
+                u.setPassword(encoder.encode(raw)); // encode จากรหัสที่กรอก
+                users.save(u);
+            }
+        }
 
         if (!ok) {
             throw new ResponseStatusException(UNAUTHORIZED, "INVALID_CREDENTIALS");
         }
 
-        // 🔁 ถ้าเป็น plain และล็อกอินผ่าน → แฮชแล้วบันทึกกลับ (auto-migrate)
-        if (!isBcrypt) {
-            u.setPassword(encoder.encode(stored));
-            users.save(u);
-        }
-
-        String role = "USER";
+        // เลือก role แรก ถ้าไม่มีให้เป็น USER (normalize ไม่ต้องมี ROLE_ ก็ได้ เพราะ JwtAuthFilter จะเติมให้)
+        String roleCode = "USER";
         if (u.getRoles() != null && !u.getRoles().isEmpty()) {
-            role = u.getRoles().stream().findFirst().map(Role::getCode).orElse("USER");
+            roleCode = u.getRoles().stream().findFirst().map(Role::getCode).orElse("USER");
         }
 
-        String token = jwt.create(u.getEmail(), role);
-        return new AuthResponse(token, u.getId(), u.getEmail(), u.getName(), role);
+        String token = jwt.create(u.getEmail(), roleCode);
+        return new AuthResponse(token, u.getId(), u.getEmail(), u.getName(), roleCode);
     }
 }
