@@ -8,3 +8,4 @@ public record ZoneDto(
         Integer capacity,
         BigDecimal price
 ) {}
+

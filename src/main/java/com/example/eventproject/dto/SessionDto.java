@@ -1,8 +1,8 @@
 package com.example.eventproject.dto;
 
-import com.example.eventproject.model.Status;
-import java.math.BigDecimal;
 import java.time.LocalTime;
+
+import com.example.eventproject.model.Status;
 
 public record SessionDto(
         Integer id,

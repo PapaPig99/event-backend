@@ -1,0 +1,50 @@
+package com.example.eventproject.repository;
+
+import com.example.eventproject.model.Registration;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+public interface RegistrationRepository extends JpaRepository<Registration, Integer> {
+    // เฉพาะของ user + event + จ่ายแล้ว
+    List<Registration> findByUserIdAndPaymentStatusOrderByRegisteredAtDesc(
+            Integer userId, Registration.PayStatus paymentStatus);
+
+    // ของ user + event + status การจอง + จ่ายแล้ว
+    List<Registration> findByUserIdAndRegistrationStatusAndPaymentStatusOrderByRegisteredAtDesc(
+            Integer userId, Registration.RegStatus registrationStatus, Registration.PayStatus paymentStatus);
+
+
+    //เฉพาะที่จ่ายแล้วทั้งหมดใน event
+    List<Registration> findByEvent_IdAndPaymentStatusOrderByRegisteredAtDesc(
+            Integer eventId, Registration.PayStatus paymentStatus);
+
+    //จ่ายแล้ว + กรอง registrationStatus ด้วย (เช่น CONFIRMED)
+    List<Registration> findByEvent_IdAndRegistrationStatusAndPaymentStatusOrderByRegisteredAtDesc(
+            Integer eventId, Registration.RegStatus registrationStatus, Registration.PayStatus paymentStatus);
+
+    //ถ้ามี PENDING ที่ยังไม่หมดเวลา (holdExpiresAt > now) → ไม่ให้สร้าง
+    //หรือมี CONFIRMED ใน session เดียวกันแล้ว → ไม่ให้สร้างซ้ำ
+    //ถ้าเป็น CANCELLED หรือ PENDING ที่หมดเวลาแล้ว → อนุญาตให้สร้างใหม่ได้
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+      SELECT r FROM Registration r
+       WHERE r.userId = :userId
+         AND r.session.id = :sessionId
+         AND (
+              (r.registrationStatus = 'PENDING' AND r.holdExpiresAt > :now)
+              OR r.registrationStatus = 'CONFIRMED'
+         )
+       ORDER BY r.registeredAt DESC
+    """)
+    List<Registration> findActiveOrConfirmedForUserAndSession(
+            @Param("userId") Integer userId,
+            @Param("sessionId") Integer sessionId,
+            @Param("now") LocalDateTime now
+    );
+}

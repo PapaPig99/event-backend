@@ -15,4 +15,6 @@ USER spring
 COPY --from=build /workspace/build/libs/*.jar /app/app.jar
 EXPOSE 8080
 ENV JAVA_OPTS=""
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=10 \
+  CMD sh -c "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"
 ENTRYPOINT ["sh","-c","java $JAVA_OPTS -jar /app/app.jar"]

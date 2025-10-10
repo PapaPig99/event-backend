@@ -1,0 +1,131 @@
+name: "CI / Build, Push & E2E (GHCR + Containerized Jobs)"
+
+on:
+  push:
+    branches: [ "main", "feat/**" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}/event-backend
+
+jobs:
+  build_test:
+    name: "Build & Unit Test (auto-detect backend dir)"
+    runs-on: ubuntu-latest
+    container:
+      image: gradle:8.7-jdk17
+      options: --user root
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show workspace (debug)
+        run: |
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          ls -la
+          echo "----"
+          if [ -d event-backend ]; then echo "Found ./event-backend"; ls -la event-backend; fi
+          if [ -f gradlew ]; then echo "Found ./gradlew at repo root"; fi
+
+      # ✅ ตรวจหาโฟลเดอร์ Gradle ให้ถูกต้อง (อย่าตรวจด้วย Dockerfile)
+      - name: Detect backend dir (for Gradle)
+        shell: bash
+        run: |
+          set -e
+          if [ -f "event-backend/gradlew" ]; then
+            BACKEND_DIR="event-backend"
+          elif [ -f "gradlew" ]; then
+            BACKEND_DIR="."
+          else
+            echo "❌ Cannot find gradlew in repo root or event-backend/"
+            ls -la
+            exit 1
+          fi
+          echo "BACKEND_DIR=$BACKEND_DIR" >> "$GITHUB_ENV"
+          echo "Using BACKEND_DIR=$BACKEND_DIR"
+          ls -la "$BACKEND_DIR"
+
+      - name: Make gradlew executable
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: chmod +x ./gradlew
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle.*', '**/gradle-wrapper.properties', '**/build.gradle*', '**/settings.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Gradle build (with tests)
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: ./gradlew clean build --no-daemon
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: |
+            ${{ env.BACKEND_DIR }}/build/libs/*.jar
+
+  docker_build_push:
+    name: "Build & Push to GHCR"
+    needs: build_test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ✅ ตรวจหา Dockerfile และตั้งตัวแปรในเชลล์ก่อน แล้วค่อยเขียนลง $GITHUB_ENV
+      - name: Detect backend dir (for Docker)
+        shell: bash
+        run: |
+          set -e
+          if [ -f "event-backend/Dockerfile" ]; then
+            BACKEND_DIR="event-backend"
+          elif [ -f "Dockerfile" ]; then
+            BACKEND_DIR="."
+          else
+            echo "❌ Cannot find Dockerfile in repo root or event-backend/"
+            ls -la
+            exit 1
+          fi
+          echo "BACKEND_DIR=$BACKEND_DIR" >> "$GITHUB_ENV"
+          echo "Using BACKEND_DIR=$BACKEND_DIR"
+          ls -la "$BACKEND_DIR"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build & Push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.BACKEND_DIR }}
+          file: ${{ env.BACKEND_DIR }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

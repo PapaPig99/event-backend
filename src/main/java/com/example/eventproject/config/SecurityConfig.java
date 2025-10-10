@@ -56,39 +56,44 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // Preflight
+                            // 0) Preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                            // 1) Swagger / Docs (ปรับตามที่โปรเจกต์ใช้จริง)
+                            .requestMatchers(
+                                    "/v3/api-docs/**",
+                                    "/swagger-ui/**",
+                                    "/swagger-ui.html",
+                                    "/v2/api-docs",
+                                    "/swagger-resources/**",
+                                    "/webjars/**"
+                            ).permitAll()
 
-                       
+                    // 2) Public assets / auth
+                    .requestMatchers("/images/**").permitAll()
+                    .requestMatchers("/api/auth/**").permitAll()
+                    .requestMatchers("/api/auth/login").permitAll()
 
-                        // (เผื่อใช้ springfox รุ่นเก่า)
-                        .requestMatchers(
-                            "/v2/api-docs",
-                            "/swagger-resources/**",
-                            "/webjars/**"
-                        ).permitAll()
+                    // 3) Public reads (GET เท่านั้น)
+                    .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/zones/session/*/availability").permitAll()
 
-                        // public สำหรับ auth และ asset
-                        .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/images/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/events", "/api/events/").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
-                        // (แนะนำ) action อื่นๆ ใต้ /api/events/** ให้ต้อง auth เช่นกัน
-                        .requestMatchers(HttpMethod.POST,   "/api/events/**").permitAll()
-                        .requestMatchers(HttpMethod.PUT,    "/api/events/**").permitAll()
-                        .requestMatchers(HttpMethod.PATCH,  "/api/events/**").permitAll()
-                        .requestMatchers(HttpMethod.DELETE, "/api/events/**").permitAll()
+                    // 4) Admin-only
+                    .requestMatchers(HttpMethod.GET,"/api/dashboard/summary").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.GET,"/api/registrations/event/**").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/api/events/**").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.PUT, "/api/events/**").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.PATCH, "/api/events/**").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.DELETE, "/api/events/**").hasRole("ADMIN")
 
-                // Public auth & assets
-                .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/images/**").permitAll()
+                    // 5) User-only
+                    .requestMatchers("/api/registrations/**").hasRole("USER")
 
-                        .requestMatchers("/api/auth/login").permitAll()
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                    // 6) อนุญาต /error
+                    .requestMatchers("/error").permitAll()
 
-                        .requestMatchers("/error").permitAll()
-                        .anyRequest().authenticated()
-                );
+                    // 7) ที่เหลือ ต้อง authenticated
+                    .anyRequest().authenticated()
+            );
 
 
         http.addFilterBefore(jwtAuthFilter(), UsernamePasswordAuthenticationFilter.class);

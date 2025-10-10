@@ -1,5 +1,6 @@
 package com.example.eventproject.config;
 
+import com.example.eventproject.model.Role;
 import com.example.eventproject.repository.UserRepository;
 import com.example.eventproject.model.User; // ปรับแพ็กเกจให้ตรงโปรเจกต์
 
@@ -31,6 +32,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest req,
                                     HttpServletResponse res,
                                     FilterChain chain) throws ServletException, IOException {
+        System.out.println("[JWT] HIT " + req.getMethod() + " " + req.getRequestURI());
+        System.out.println("[JWT] Authorization: " + req.getHeader("Authorization"));
 
         String auth = req.getHeader("Authorization");
         if (auth != null && auth.startsWith("Bearer ")) {
@@ -42,29 +45,23 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 if (userOpt.isPresent()) {
                     User user = userOpt.get();
 
-                    // ถ้าไม่มี role ก็ให้สิทธิ์ว่าง ๆ ไปก่อน (ไม่พึ่ง user.getAuthorities())
-                    String role = safeRole(user); // เช่น "USER"
-                    List<SimpleGrantedAuthority> authorities =
-                            List.of(new SimpleGrantedAuthority("ROLE_" + role));
+                    var authorities = user.getRoles().isEmpty()
+                            ? List.of(new SimpleGrantedAuthority("ROLE_USER"))
+                            : user.getRoles().stream()
+                            .map(Role::getCode)                               // "ADMIN" หรือ "ROLE_ADMIN"
+                            .map(r -> r.startsWith("ROLE_") ? r : "ROLE_" + r) // normalize
+                            .map(SimpleGrantedAuthority::new)
+                            .toList();
 
-                    // ใช้ principal เป็น email ก็พอ ไม่ต้องเป็น entity ทั้งตัว
-                    UsernamePasswordAuthenticationToken authToken =
-                            new UsernamePasswordAuthenticationToken(email, null, authorities);
+                    String primaryRole = authorities.get(0).getAuthority().replaceFirst("^ROLE_", "");
 
+                    var principal = new CurrentUser(user.getId(), user.getEmail(), primaryRole, authorities);
+                    var authToken  = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+
                 }
             }
         }
         chain.doFilter(req, res);
-    }
-
-    private String safeRole(User user) {
-        try {
-            // ถ้า User มี field ชื่อ role (String) เช่น "USER" / "ADMIN"
-            String r = (String) User.class.getMethod("getRole").invoke(user);
-            return (r != null && !r.isBlank()) ? r : "USER";
-        } catch (Exception ignore) {
-            return "USER";
-        }
     }
 }
