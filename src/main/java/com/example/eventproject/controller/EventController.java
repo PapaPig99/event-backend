@@ -3,6 +3,8 @@ package com.example.eventproject.controller;
 import java.net.URI;
 import java.util.List;
 
+import com.example.eventproject.dto.EventDetailViewDto;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -51,6 +53,15 @@ public class EventController {
     public EventDetailDto get(@PathVariable Integer id) {
         return service.get(id);
     }
+
+    @Operation(summary = "รายละเอียด Event (View: รวม sessions + สถานะขาย + ราคาบัตรทุกโซน)")
+    @ApiResponse(responseCode = "200", description = "สำเร็จ")
+    @GetMapping("/{id}/view")
+    public EventDetailViewDto getView(@PathVariable Integer id) {
+        return service.getView(id);
+    }
+
+
 
     /* =========================
      *         CREATE

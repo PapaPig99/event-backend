@@ -1,17 +1,19 @@
 package com.example.eventproject.service;
 
 import com.example.eventproject.dto.*;
-import com.example.eventproject.model.Event;
-import com.example.eventproject.model.EventSession;
-import com.example.eventproject.model.EventZone;
+import com.example.eventproject.model.*;
 import com.example.eventproject.repository.EventRepository;
 import com.example.eventproject.repository.EventSessionRepository;
 import com.example.eventproject.repository.EventZoneRepository;
+import com.example.eventproject.repository.RegistrationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -22,6 +24,7 @@ public class EventService {
     private final EventSessionRepository sessionRepo;
     private final EventZoneRepository zoneRepo;
     private final FileStorageService fileStorageService;
+    private final RegistrationRepository regRepo;
 
     /* ========== READ ========== */
 
@@ -200,5 +203,64 @@ public class EventService {
             e.setSeatmapImageUrl(dto.seatmapImageUrl());
         }
     }
+    /* ========== Read 2 (event+salestatus+pricezone)========== */
+    @Transactional(readOnly = true)
+    public EventDetailViewDto getView(Integer id) {
+        Event e = eventRepo.findDetailById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + id));
+
+        // ===== 1. map sessions =====
+        var sessions = e.getSessions().stream()
+                .map(s -> new SessionDto(
+                        s.getId(), s.getName(), s.getStartTime(), s.getStatus()
+                )).toList();
+
+        // ===== 2. ราคาทุกzone =====
+        var prices = zoneRepo.findPricesByEventId(id);
+
+        // ===== 3. คำนวณสถานะการขาย =====
+        EventSaleStatus saleStatus = computeSaleStatus(e);
+
+        // ===== 4. return DTO ใหม่ =====
+        return new EventDetailViewDto(
+                e.getId(), e.getTitle(), e.getCategory(), e.getLocation(),
+                e.getStartDate(), e.getEndDate(), e.getStatus(),
+                e.getSaleStartAt(), e.getSaleEndAt(), e.isSaleUntilSoldout(),
+                e.getDoorOpenTime(), e.getDescription(),
+                e.getPosterImageUrl(), e.getDetailImageUrl(), e.getSeatmapImageUrl(),
+                sessions,
+                saleStatus,
+                prices
+        );
+    }
+    private EventSaleStatus computeSaleStatus(Event e) {
+        LocalDateTime now = LocalDateTime.now();
+
+        // 0) ปิดทั้งอีเวนต์
+        if (e.getStatus() == Status.CLOSED) return EventSaleStatus.CLOSED;
+
+        // 1) ยังไม่ถึงเวลาเริ่มขาย
+        if (e.getSaleStartAt() != null && now.isBefore(e.getSaleStartAt())) {
+            return EventSaleStatus.UPCOMING;
+        }
+
+        // 2) ถ้าไม่ได้ขายจนหมด และถึง/เลยเวลา saleEndAt แล้ว → ปิด (inclusive)
+        if (!Boolean.TRUE.equals(e.isSaleUntilSoldout())
+                && e.getSaleEndAt() != null
+                && (now.isAfter(e.getSaleEndAt()) || now.isEqual(e.getSaleEndAt()))) {
+            return EventSaleStatus.CLOSED;
+        }
+
+        // 3) (ออปชัน) ถ้าอยากปิดหลังงานจบจริง ๆ
+        if (e.getEndDate() != null && LocalDate.now().isAfter(e.getEndDate())) {
+            return EventSaleStatus.CLOSED;
+        }
+
+        // 4) อื่น ๆ = เปิดขาย
+        return EventSaleStatus.OPEN;
+    }
+
+
+
 
 }
