@@ -1,11 +1,14 @@
 package com.example.eventproject.dto;
-
-import com.example.eventproject.model.Status;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
-public record  EventUpsertRequest(
+import com.example.eventproject.model.EventSaleStatus;
+import com.example.eventproject.model.Status;
+
+
+public record EventDetailViewDto(
+        Integer id,
         String title,
         String category,
         String location,
@@ -20,7 +23,8 @@ public record  EventUpsertRequest(
         String posterImageUrl,
         String detailImageUrl,
         String seatmapImageUrl,
-        Integer createdByUserId,
         List<SessionDto> sessions,
-        List<ZoneDto> zones
+
+        EventSaleStatus saleStatus,
+        List<PriceDto> prices
 ) {}
