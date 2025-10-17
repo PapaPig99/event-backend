@@ -61,8 +61,8 @@ public class RegistrationService {
 
     @Transactional
     public Registration confirm(Integer id, RegistrationDto.ConfirmRequest req, Integer userId) {
-        var reg = registrationRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("registration not found"));
+        var reg = registrationRepository.findWithAllRelationsById(id)
+                .orElseThrow(() -> new IllegalArgumentException("not found"));
         if (!reg.getUserId().equals(userId))
             throw new SecurityException("forbidden");
         if (reg.getRegistrationStatus() != Registration.RegStatus.PENDING)
