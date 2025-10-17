@@ -20,7 +20,6 @@ public record  EventUpsertRequest(
         String posterImageUrl,
         String detailImageUrl,
         String seatmapImageUrl,
-        Integer createdByUserId,
         List<SessionDto> sessions,
         List<ZoneDto> zones
 ) {}
