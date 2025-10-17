@@ -18,6 +18,10 @@ public class Registration {
     @Column(name = "user_id", nullable = false)
     private Integer userId;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", insertable = false, updatable = false)
+    private User user;
+
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "event_id")
     private Event event;
 
@@ -66,6 +70,8 @@ public class Registration {
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
     public Integer getUserId() { return userId; }
+    public User getUser() { return user; }
+
     public void setUserId(Integer userId) { this.userId = userId; }
     public Event getEvent() { return event; }
     public void setEvent(Event event) { this.event = event; }

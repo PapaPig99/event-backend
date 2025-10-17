@@ -7,7 +7,7 @@ import com.example.eventproject.model.Registration;
 
 public class RegistrationDto {
 
-    //  POST /api/registrations
+    // POST /api/registrations
     public record CreateRequest(
             Integer eventId,
             Integer sessionId,
@@ -15,7 +15,7 @@ public class RegistrationDto {
             Integer quantity
     ) {}
 
-    // (Response DTO)
+    // Response DTO
     public record Response(
             Integer id,
             Integer userId,
@@ -32,19 +32,20 @@ public class RegistrationDto {
             LocalDateTime updatedAt,
             LocalDateTime paidAt,
             String paymentReference,
-            String cancelledReason
+            String cancelledReason,
+            UserDto user
     ) {
         // แปลงจาก Entity -> DTO
         public static Response from(Registration reg) {
             return new Response(
                     reg.getId(),
-                    reg.getUserId(),
+                    reg.getUserId(), // ถ้ามี relation reg.getUser() ก็ยังคงเก็บ userId แยกได้
                     reg.getEvent() != null ? reg.getEvent().getId() : null,
                     reg.getSession() != null ? reg.getSession().getId() : null,
                     reg.getZone() != null ? reg.getZone().getId() : null,
                     reg.getQuantity(),
-                    reg.getRegistrationStatus().name(),
-                    reg.getPaymentStatus().name(),
+                    reg.getRegistrationStatus() != null ? reg.getRegistrationStatus().name() : null,
+                    reg.getPaymentStatus() != null ? reg.getPaymentStatus().name() : null,
                     reg.getUnitPrice(),
                     reg.getTotalPrice(),
                     reg.getHoldExpiresAt(),
@@ -52,7 +53,8 @@ public class RegistrationDto {
                     reg.getUpdatedAt(),
                     reg.getPaidAt(),
                     reg.getPaymentReference(),
-                    reg.getCancelledReason() != null ? reg.getCancelledReason().name() : null
+                    reg.getCancelledReason() != null ? reg.getCancelledReason().name() : null,
+                    UserDto.from(reg.getUser())
             );
         }
     }
@@ -62,7 +64,7 @@ public class RegistrationDto {
             String paymentReference
     ) {}
 
-    //  PATCH /api/registrations/{id}/cancel
+    // PATCH /api/registrations/{id}/cancel
     public record CancelRequest(
             String reason
     ) {}
