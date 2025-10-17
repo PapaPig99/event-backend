@@ -1,16 +1,20 @@
 package com.example.eventproject.service;
 
-import com.example.eventproject.dto.RegistrationDto;
-import com.example.eventproject.model.*;
-import com.example.eventproject.repository.RegistrationRepository;
-import com.example.eventproject.repository.EventZoneRepository;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.example.eventproject.dto.RegistrationDto;
+import com.example.eventproject.model.Event;
+import com.example.eventproject.model.EventSession;
+import com.example.eventproject.model.Registration;
+import com.example.eventproject.repository.EventZoneRepository;
+import com.example.eventproject.repository.RegistrationRepository;
+
+import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
@@ -31,14 +35,12 @@ public class RegistrationService {
         // === กันจองซ้ำใน session เดียวกันของผู้ใช้เดียวกัน ===
         var now = LocalDateTime.now();
         var conflicts = registrationRepository.findActiveOrConfirmedForUserAndSession(
-                userId, req.sessionId(), now
-        );
+                userId, req.sessionId(), now);
         if (!conflicts.isEmpty()) {
             var latest = conflicts.isEmpty() ? null : conflicts.get(0);
             throw new IllegalStateException(
                     "You already have a booking for this session (status=" +
-                            latest.getRegistrationStatus() + ", id=" + latest.getId() + ")"
-            );
+                            latest.getRegistrationStatus() + ", id=" + latest.getId() + ")");
         }
 
         var reg = new Registration();
@@ -57,12 +59,12 @@ public class RegistrationService {
         return registrationRepository.save(reg);
     }
 
-
     @Transactional
     public Registration confirm(Integer id, RegistrationDto.ConfirmRequest req, Integer userId) {
         var reg = registrationRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("registration not found"));
-        if (!reg.getUserId().equals(userId)) throw new SecurityException("forbidden");
+        if (!reg.getUserId().equals(userId))
+            throw new SecurityException("forbidden");
         if (reg.getRegistrationStatus() != Registration.RegStatus.PENDING)
             throw new IllegalStateException("not PENDING");
         if (reg.getHoldExpiresAt() != null && reg.getHoldExpiresAt().isBefore(LocalDateTime.now()))
@@ -80,12 +82,17 @@ public class RegistrationService {
     public Registration cancel(Integer id, RegistrationDto.CancelRequest req, Integer userId) {
         var reg = registrationRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("registration not found"));
-        if (!reg.getUserId().equals(userId)) throw new SecurityException("forbidden");
-        if (reg.getRegistrationStatus() == Registration.RegStatus.CANCELLED) return reg;
+        if (!reg.getUserId().equals(userId))
+            throw new SecurityException("forbidden");
+        if (reg.getRegistrationStatus() == Registration.RegStatus.CANCELLED)
+            return reg;
 
         var reason = Registration.CancelledReason.USER_CANCELLED;
         if (req != null && req.reason() != null) {
-            try { reason = Registration.CancelledReason.valueOf(req.reason()); } catch (Exception ignored) {}
+            try {
+                reason = Registration.CancelledReason.valueOf(req.reason());
+            } catch (Exception ignored) {
+            }
         }
         reg.setRegistrationStatus(Registration.RegStatus.CANCELLED);
         reg.setCancelledReason(reason);
@@ -105,7 +112,8 @@ public class RegistrationService {
             try {
                 st = Registration.RegStatus.valueOf(status);
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid status: " + status); // หรือ map เป็น 400 ด้วย @ControllerAdvice
+                throw new IllegalArgumentException("Invalid status: " + status); // หรือ map เป็น 400 ด้วย
+                                                                                 // @ControllerAdvice
             }
             regs = registrationRepository.findByUserIdAndRegistrationStatusAndPaymentStatusOrderByRegisteredAtDesc(
                     userId, st, Registration.PayStatus.PAID);
@@ -113,8 +121,7 @@ public class RegistrationService {
         return regs.stream().map(RegistrationDto.Response::from).toList();
     }
 
-
-    // Regisตามevent
+    // Regis ตาม event
     @Transactional(readOnly = true)
     public List<RegistrationDto.Response> getAllByEvent(Integer eventId, String status) {
         List<Registration> regs;
@@ -122,12 +129,27 @@ public class RegistrationService {
             regs = registrationRepository.findByEvent_IdAndPaymentStatusOrderByRegisteredAtDesc(
                     eventId, Registration.PayStatus.PAID);
         } else {
-            var st = Registration.RegStatus.valueOf(status);
+            var st = Registration.RegStatus.valueOf(status.toUpperCase());
             regs = registrationRepository.findByEvent_IdAndRegistrationStatusAndPaymentStatusOrderByRegisteredAtDesc(
                     eventId, st, Registration.PayStatus.PAID);
         }
         return regs.stream().map(RegistrationDto.Response::from).toList();
     }
 
+    // Regis ตาม event และ session
+    @Transactional(readOnly = true)
+    public List<RegistrationDto.Response> getAllByEventAndSession(Integer eventId, Integer sessionId, String status) {
+        List<Registration> regs;
+        if (status == null || status.isBlank()) {
+            regs = registrationRepository.findByEvent_IdAndSession_IdAndPaymentStatusOrderByRegisteredAtDesc(
+                    eventId, sessionId, Registration.PayStatus.PAID);
+        } else {
+            var st = Registration.RegStatus.valueOf(status.toUpperCase());
+            regs = registrationRepository
+                    .findByEvent_IdAndSession_IdAndRegistrationStatusAndPaymentStatusOrderByRegisteredAtDesc(
+                            eventId, sessionId, st, Registration.PayStatus.PAID);
+        }
+        return regs.stream().map(RegistrationDto.Response::from).toList();
+    }
 
 }

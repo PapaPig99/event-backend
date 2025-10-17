@@ -70,5 +70,16 @@ public class RegistrationController {
         var result = registrationService.getAllByEvent(eventId, status);
         return ResponseEntity.ok(result);
     }
+    // ดึงรายการจองของทุก user ที่จ่ายเงินแล้ว ตาม event + session
+    @GetMapping("/event/{eventId}/{sessionId}")
+    public ResponseEntity<List<RegistrationDto.Response>> getAllByEventAndSession(
+            @PathVariable Integer eventId,
+            @PathVariable Integer sessionId,
+            @RequestParam(required = false) String status
+    ) {
+        var result = registrationService.getAllByEventAndSession(eventId, sessionId, status);
+        return ResponseEntity.ok(result);
+    }
+
 
 }

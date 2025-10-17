@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -24,8 +25,7 @@ public class EventService {
     private final EventSessionRepository sessionRepo;
     private final EventZoneRepository zoneRepo;
     private final FileStorageService fileStorageService;
-    private final RegistrationRepository regRepo;
-
+    private final RegistrationRepository registrationRepository;
     /* ========== READ ========== */
 
     @Transactional(readOnly = true)
@@ -61,10 +61,13 @@ public class EventService {
 
     @Transactional
     public Integer create(EventUpsertRequest dto,
-                          MultipartFile poster, MultipartFile detail, MultipartFile seatmap) {
+                          MultipartFile poster, MultipartFile detail, MultipartFile seatmap,Integer userId) {
         Event e = new Event();
         applyCoreFields(e, dto);
         setImagesFromUploadsOrDto(e, dto, poster, detail, seatmap);
+
+            // กำหนดuserที่สร้างeventจาก token
+        e.setCreatedByUserId(userId);
 
         Event saved = eventRepo.save(e);
 
@@ -94,58 +97,102 @@ public class EventService {
     }
 
     /* ========== UPDATE ========== */
-
     @Transactional
     public void update(Integer id, EventUpsertRequest dto,
                        MultipartFile poster, MultipartFile detail, MultipartFile seatmap) {
         Event e = eventRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + id));
 
+        // 1) core fields + images
         applyCoreFields(e, dto);
         setImagesFromUploadsOrDto(e, dto, poster, detail, seatmap);
+        eventRepo.save(e);
 
-        Event saved = eventRepo.save(e);
+        // 2) SESSIONS
+        var existingSessions = sessionRepo.findByEventId(id);
+        var sessionById = existingSessions.stream()
+                .collect(java.util.stream.Collectors.toMap(EventSession::getId, s -> s));
 
-        sessionRepo.deleteByEventId(saved.getId());
         if (dto.sessions() != null) {
             for (SessionDto s : dto.sessions()) {
-                EventSession es = new EventSession();
-                es.setEvent(saved);
-                es.setName(s.name());
-                es.setStartTime(s.startTime());
-                es.setStatus(s.status());
-                sessionRepo.save(es);
+                if (s.id() != null && sessionById.containsKey(s.id())) {
+                    var es = sessionById.get(s.id());
+                    es.setName(s.name());
+                    es.setStartTime(s.startTime());
+                    es.setStatus(s.status());
+                    sessionRepo.save(es);
+                } else {
+                    var es = new EventSession();
+                    es.setEvent(e);
+                    es.setName(s.name());
+                    es.setStartTime(s.startTime());
+                    es.setStatus(s.status());
+                    sessionRepo.save(es);
+                }
             }
         }
 
-        zoneRepo.deleteByEventId(saved.getId());
+        // 3) ZONES
+        var existingZones = zoneRepo.findByEventId(id);
+        var zoneById = existingZones.stream()
+                .collect(java.util.stream.Collectors.toMap(EventZone::getId, z -> z));
+
         if (dto.zones() != null) {
             for (ZoneDto z : dto.zones()) {
-                EventZone ez = new EventZone();
-                ez.setEvent(saved);
-                ez.setName(z.name());
-                ez.setCapacity(z.capacity());
-                ez.setPrice(z.price());
-                zoneRepo.save(ez);
+                if (z.id() != null && zoneById.containsKey(z.id())) {
+                    // UPDATE in-place
+                    var ez = zoneById.get(z.id());
+
+                    // กันแก้ capacity ต่ำกว่ายอดที่ถูกจอง/ขายไปแล้ว
+                    int reserved = registrationRepository.sumActiveQuantityByZone(z.id());
+                    if (z.capacity() < reserved) {
+                        throw new IllegalStateException(
+                                "Capacity cannot be less than reserved (" + reserved + ") in zone " + z.id()
+                        );
+                    }
+
+                    ez.setName(z.name());
+                    ez.setCapacity(z.capacity());
+                    ez.setPrice(z.price());
+                    zoneRepo.save(ez);
+                } else {
+                    // CREATE new
+                    var ez = new EventZone();
+                    ez.setEvent(e);
+                    ez.setName(z.name());
+                    ez.setCapacity(z.capacity());
+                    ez.setPrice(z.price());
+                    zoneRepo.save(ez);
+                }
             }
         }
     }
 
-    /* ========== DELETE ========== */
 
+
+
+    /* ========== DELETE ========== */
     @Transactional
     public void delete(Integer id) {
         Event e = eventRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + id));
 
+        // 1) ลบไฟล์ประกอบ (เช็ค null/ว่างกันพลาดได้)
         fileStorageService.deleteFile(e.getPosterImageUrl());
         fileStorageService.deleteFile(e.getDetailImageUrl());
         fileStorageService.deleteFile(e.getSeatmapImageUrl());
 
+        // 2) ลบ register ที่ผูกกับอีเวนต์นี้ก่อน
+        registrationRepository.deleteAllByEventCascade(id);
+
+        // 3) ลบลูกตัวอื่น ๆ ของอีเวนต์ (ถ้ามี FK ไปหา session/zone ให้ลบ register ก่อนเสมอ)
         sessionRepo.deleteByEventId(id);
         zoneRepo.deleteByEventId(id);
+
+        // 4) สุดท้ายลบ event
         eventRepo.delete(e);
     }
+
 
     /* ========== Helpers ========== */
 
@@ -161,7 +208,6 @@ public class EventService {
         e.setSaleUntilSoldout(Boolean.TRUE.equals(dto.saleUntilSoldout()));
         e.setDoorOpenTime(dto.doorOpenTime());
         e.setDescription(dto.description());
-        e.setCreatedByUserId(dto.createdByUserId());
     }
 
     private void setImagesFromUploadsOrDto(

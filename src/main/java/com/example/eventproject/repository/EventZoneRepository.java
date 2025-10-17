@@ -5,8 +5,8 @@ import org.springframework.data.repository.query.Param;
 import com.example.eventproject.model.EventZone;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.jpa.repository.Query;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.jpa.repository.Query;
 import com.example.eventproject.dto.ZoneAvailabilityDto;
 
 
@@ -47,6 +47,8 @@ public interface EventZoneRepository extends JpaRepository<EventZone, Integer> {
         where z.event.id = :eventId
     """)
     List<PriceDto> findPricesByEventId(@Param("eventId") Integer eventId);
+
+    List<EventZone> findByEventId(Integer eventId);
 
 }
 
