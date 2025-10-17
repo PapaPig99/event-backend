@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface RegistrationRepository extends JpaRepository<Registration, Integer> {
     // เฉพาะของ user + PAID
@@ -19,6 +20,10 @@ public interface RegistrationRepository extends JpaRepository<Registration, Inte
     @EntityGraph(attributePaths = {"user", "event", "session", "zone"})
     List<Registration> findByUserIdAndRegistrationStatusAndPaymentStatusOrderByRegisteredAtDesc(
             Integer userId, Registration.RegStatus registrationStatus, Registration.PayStatus paymentStatus);
+
+    @EntityGraph(attributePaths = {"user", "event", "session", "zone"})
+    Optional<Registration> findWithAllRelationsById(Integer id);
+
 
     // ทั้งหมดใน event + PAID
     @EntityGraph(attributePaths = {"user", "event", "session", "zone"})
