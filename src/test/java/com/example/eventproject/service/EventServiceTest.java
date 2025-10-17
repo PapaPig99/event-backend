@@ -18,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.multipart.MultipartFile;
+import com.example.eventproject.repository.RegistrationRepository;
 
 import java.util.List;
 import java.util.Optional;
@@ -37,6 +38,9 @@ class EventServiceTest {
     @Mock private EventSessionRepository sessionRepo;
     @Mock private EventZoneRepository zoneRepo;
     @Mock private FileStorageService fileStorageService;
+    @Mock private RegistrationRepository registrationRepository;
+
+
 
     @InjectMocks private EventService service;
 
@@ -163,7 +167,7 @@ class EventServiceTest {
             return saved;
         });
 
-        Integer id = service.create(dto, poster, detail, seat);
+        Integer id = service.create(dto, poster, detail, seat, 42);
         assertEquals(123, id);
 
         // ตรวจว่าตอน save ครั้งแรก มีการตั้งค่า URL ใหม่เข้ากับ Event แล้ว
@@ -194,7 +198,7 @@ class EventServiceTest {
             return e;
         });
 
-        Integer id = service.create(dto, emptyFile(), emptyFile(), emptyFile());
+        Integer id = service.create(dto, emptyFile(), emptyFile(), emptyFile(), 42);
         assertEquals(9, id);
 
         verify(eventRepo, atLeastOnce()).save(eventCaptor.capture());
@@ -236,9 +240,9 @@ class EventServiceTest {
         verify(eventRepo, atLeastOnce()).save(existing);
 
         // ลบลูกเก่า แล้วสร้างใหม่ตามจำนวน
-        verify(sessionRepo).deleteByEventId(77);
+        verify(sessionRepo).findByEventId(77);
         verify(sessionRepo, times(2)).save(any(EventSession.class));
-        verify(zoneRepo).deleteByEventId(77);
+        verify(zoneRepo).findByEventId(77);
         verify(zoneRepo, times(2)).save(any(EventZone.class));
 
         // อัปไฟล์เรียบร้อย
@@ -277,8 +281,8 @@ class EventServiceTest {
         assertNull(existing.getSeatmapImageUrl());
 
         // ไม่มีสร้างลูกใหม่
-        verify(sessionRepo).deleteByEventId(55);
-        verify(zoneRepo).deleteByEventId(55);
+        verify(sessionRepo).findByEventId(55);
+        verify(zoneRepo).findByEventId(55);
         verify(sessionRepo, never()).save(any());
         verify(zoneRepo,    never()).save(any());
     }
@@ -300,8 +304,9 @@ class EventServiceTest {
         verify(fileStorageService).deleteFile("p");
         verify(fileStorageService).deleteFile("d");
         verify(fileStorageService).deleteFile("s");
-        verify(sessionRepo).deleteByEventId(101);
         verify(zoneRepo).deleteByEventId(101);
+        verify(registrationRepository).deleteAllByEventCascade(101);
+        verify(sessionRepo).deleteByEventId(101);
         verify(eventRepo).delete(e);
     }
 

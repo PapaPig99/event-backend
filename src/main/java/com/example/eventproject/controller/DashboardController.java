@@ -28,5 +28,14 @@ public class DashboardController {
     @GetMapping("/dashboard/sales-progress")
     public ResponseEntity<List<EventSalesSummary>> salesProgress() {
         return ResponseEntity.ok(service.getOverview().getSalesProgress());
+
+    }
+    @GetMapping("/events/{eventId}/analytics")
+    public ResponseEntity<Void> analytics(
+            @PathVariable Integer eventId,
+            @RequestParam(value = "sessionId", required = false) Integer sessionId
+    ) {
+        // intentionally empty: return 200 with empty body
+        return ResponseEntity.ok().build();
     }
 }

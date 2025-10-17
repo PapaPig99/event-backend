@@ -124,4 +124,7 @@ class DashboardControllerTest {
         mockMvc.perform(post("/api/dashboard/summary"))
                 .andExpect(status().isMethodNotAllowed());
     }
+
 }
+
+
