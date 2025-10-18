@@ -51,26 +51,32 @@ class RegistrationServiceTest {
     }
 
     private RegistrationDto.Response respOf(Registration reg) {
-        // ทำ DTO ง่าย ๆ (ค่าที่ไม่ได้ใช้ assert ให้เป็น null/0 ได้)
         return new RegistrationDto.Response(
-                reg.getId(),
-                reg.getUserId(),
-                reg.getEvent() != null ? reg.getEvent().getId() : null,
-                reg.getSession() != null ? reg.getSession().getId() : null,
-                reg.getZone() != null ? reg.getZone().getId() : null,
-                reg.getQuantity(),
-                reg.getRegistrationStatus() != null ? reg.getRegistrationStatus().name() : null,
-                reg.getPaymentStatus() != null ? reg.getPaymentStatus().name() : null,
-                reg.getUnitPrice(),
-                reg.getTotalPrice(),
-                reg.getHoldExpiresAt(),
-                reg.getRegisteredAt(),
-                reg.getUpdatedAt(),
-                reg.getPaidAt(),
-                reg.getPaymentReference(),
-                reg.getCancelledReason() != null ? reg.getCancelledReason().name() : null
+                reg.getId(),                                              // id
+                reg.getUserId(),                                          // userId
+                reg.getEvent()   != null ? reg.getEvent().getId()   : null, // eventId
+                reg.getSession() != null ? reg.getSession().getId() : null, // sessionId
+                reg.getZone()    != null ? reg.getZone().getId()    : null, // zoneId
+
+                reg.getRegistrationStatus() != null ? reg.getRegistrationStatus().name() : null, // registrationStatus (String)
+                reg.getQuantity(),                                         // quantity (Integer)
+                reg.getPaymentStatus() != null ? reg.getPaymentStatus().name() : null,          // paymentStatus (String)
+                null,                                                      // paymentMethod / channel (ไม่มีใน model -> ใส่ null)
+
+                reg.getUnitPrice(),                                        // pricePerTicket
+                reg.getTotalPrice(),                                       // totalPrice
+
+                reg.getHoldExpiresAt(),                                    // reservedUntil
+                reg.getRegisteredAt(),                                     // createdAt
+                reg.getUpdatedAt(),                                        // updatedAt
+                reg.getPaidAt(),                                           // paidAt
+
+                reg.getPaymentReference(),                                 // txRef (String)
+                reg.getCancelledReason() != null ? reg.getCancelledReason().name() : null, // cancelReason (String)
+                null                                                       // user (UserDto) – ไม่ใช้ในเทสนี้
         );
     }
+
 
     /* ===================== create ===================== */
 

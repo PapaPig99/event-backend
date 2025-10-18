@@ -87,17 +87,27 @@ class RegistrationControllerTest {
     private RegistrationDto.Response sampleResponse(int id, String regStatus, String payStatus) {
         LocalDateTime now = LocalDateTime.of(2025, 10, 17, 12, 0, 0);
         return new RegistrationDto.Response(
-                id, 123, 1, 10, 5, 2,
-                regStatus, payStatus,
-                new BigDecimal("500.00"),
-                new BigDecimal("1000.00"),
-                now.plusMinutes(10),
-                now, now,
-                "PAID".equals(payStatus) ? now : null,
-                "TXREF-123",
-                null
+                id,                  // id
+                123,                 // userId
+                1,                   // eventId
+                10,                  // sessionId
+                5,                   // zoneId
+                regStatus,           // registrationStatus  ✅ มาก่อน quantity
+                2,                   // quantity
+                payStatus,           // paymentStatus
+                "CARD",              // paymentMethodOrChannel (เติมให้ครบ)
+                new BigDecimal("500.00"),   // pricePerTicket
+                new BigDecimal("1000.00"),  // totalPrice
+                now.plusMinutes(10), // reservedUntil
+                now,                 // createdAt
+                now,                 // updatedAt
+                "PAID".equals(payStatus) ? now : null, // paidAt
+                "TXREF-123",         // txRef
+                null,                // cancelReason
+                null                 // user (UserDto) — ไม่ใช้ก็ใส่ null
         );
     }
+
 
     /* ========== CREATE ========== */
     @Test
