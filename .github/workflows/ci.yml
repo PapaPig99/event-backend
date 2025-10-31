@@ -8,7 +8,7 @@ on:
 
 # ชื่อ image สำหรับ GHCR
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository }}/event-backend
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/event-backend
 
 # ป้องกันการรันชนกันบน branch เดียวกัน
 concurrency:
