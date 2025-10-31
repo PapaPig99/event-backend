@@ -6,9 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
-# ชื่อ image สำหรับ GHCR (บังคับ lowercase ตั้งแต่ต้น)
+# ชื่อ image สำหรับ GHCR (ยังไม่บังคับตัวเล็ก ณ ตรงนี้)
 env:
-  IMAGE_NAME: ghcr.io/${{ toLower(github.repository_owner) }}/event-backend
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/event-backend
 
 # ป้องกันการรันชนกันบน branch เดียวกัน
 concurrency:
@@ -26,6 +26,10 @@ jobs:
       image: gradle:8.7-jdk17
       options: --user root
     steps:
+      - name: Normalize IMAGE_NAME to lowercase
+        run: |
+          echo "IMAGE_NAME=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -83,6 +87,10 @@ jobs:
       image: gradle:8.7-jdk17
       options: --user root
     steps:
+      - name: Normalize IMAGE_NAME to lowercase
+        run: |
+          echo "IMAGE_NAME=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -137,6 +145,10 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Normalize IMAGE_NAME to lowercase
+        run: |
+          echo "IMAGE_NAME=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -163,7 +175,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: backend-jar
-        # ใช้ path เริ่มต้น (โฟลเดอร์ตามชื่อ artifact)
 
       - name: Copy JAR into Docker context (if Dockerfile expects it)
         shell: bash
@@ -219,6 +230,10 @@ jobs:
     permissions:
       packages: read
     steps:
+      - name: Normalize IMAGE_NAME to lowercase
+        run: |
+          echo "IMAGE_NAME=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Login to GHCR (pull image for test)
         uses: docker/login-action@v3
         with:
@@ -245,7 +260,7 @@ jobs:
 
       - name: Run container
         env:
-          APP_PORT: "8080"              # ปรับตามพอร์ตจริงใน container
+          APP_PORT: "8080"                 # ปรับตามพอร์ตจริงใน container
           HEALTH_PATH: "/actuator/health"  # ปรับเป็น /healthz หรืออื่น ๆ ได้
         run: |
           set -e
