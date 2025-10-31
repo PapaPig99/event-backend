@@ -6,31 +6,28 @@ on:
   pull_request:
     branches: [ "main" ]
 
+# ชื่อ image สำหรับ GHCR
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}/event-backend
 
+# ป้องกันการรันชนกันบน branch เดียวกัน
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build_test:
-    name: "Build & Unit Test (auto-detect backend dir)"
+  # 1) รัน Unit Test แยกต่างหาก (ถ้าพังให้หยุดตั้งแต่ตรงนี้)
+  unit_test:
+    name: "Unit Test (Gradle)"
     runs-on: ubuntu-latest
     container:
       image: gradle:8.7-jdk17
       options: --user root
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show workspace (debug)
-        run: |
-          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
-          ls -la
-          echo "----"
-          if [ -d event-backend ]; then echo "Found ./event-backend"; ls -la event-backend; fi
-          if [ -f gradlew ]; then echo "Found ./gradlew at repo root"; fi
-
-      # ✅ ตรวจหาโฟลเดอร์ Gradle ให้ถูกต้อง (อย่าตรวจด้วย Dockerfile)
-      - name: Detect backend dir (for Gradle)
+      - name: Detect backend dir (find gradlew)
         shell: bash
         run: |
           set -e
@@ -39,7 +36,7 @@ jobs:
           elif [ -f "gradlew" ]; then
             BACKEND_DIR="."
           else
-            echo "❌ Cannot find gradlew in repo root or event-backend/"
+            echo "❌ gradlew not found in repo root or event-backend/"
             ls -la
             exit 1
           fi
@@ -61,9 +58,63 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Gradle build (with tests)
+      # ✅ รัน unit test เท่านั้น (เร็ว, ชัดเจน)
+      - name: Run unit tests
         working-directory: ${{ env.BACKEND_DIR }}
-        run: ./gradlew clean build --no-daemon
+        run: ./gradlew test --no-daemon
+
+      - name: Upload test reports (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: ${{ env.BACKEND_DIR }}/build/reports/tests/test
+
+  # 2) Build JAR (ไม่รันเทสต์ซ้ำ)
+  build_jar:
+    name: "Assemble JAR (-x test)"
+    needs: unit_test
+    runs-on: ubuntu-latest
+    container:
+      image: gradle:8.7-jdk17
+      options: --user root
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect backend dir (find gradlew)
+        shell: bash
+        run: |
+          set -e
+          if [ -f "event-backend/gradlew" ]; then
+            BACKEND_DIR="event-backend"
+          elif [ -f "gradlew" ]; then
+            BACKEND_DIR="."
+          else
+            echo "❌ gradlew not found in repo root or event-backend/"
+            exit 1
+          fi
+          echo "BACKEND_DIR=$BACKEND_DIR" >> "$GITHUB_ENV"
+          echo "Using BACKEND_DIR=$BACKEND_DIR"
+
+      - name: Make gradlew executable
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: chmod +x ./gradlew
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle.*', '**/gradle-wrapper.properties', '**/build.gradle*', '**/settings.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # ✅ build อย่างเดียว ไม่รัน test อีกรอบ
+      - name: Gradle assemble (no tests)
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: ./gradlew clean assemble -x test --no-daemon
 
       - name: Upload JAR
         uses: actions/upload-artifact@v4
@@ -72,19 +123,19 @@ jobs:
           path: |
             ${{ env.BACKEND_DIR }}/build/libs/*.jar
 
+  # 3) สร้างและ push Docker image ไป GHCR
   docker_build_push:
     name: "Build & Push to GHCR"
-    needs: build_test
+    needs: [unit_test, build_jar]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ✅ ตรวจหา Dockerfile และตั้งตัวแปรในเชลล์ก่อน แล้วค่อยเขียนลง $GITHUB_ENV
+      # ตรวจหา Dockerfile ใน root หรือ event-backend/
       - name: Detect backend dir (for Docker)
         shell: bash
         run: |
@@ -94,13 +145,35 @@ jobs:
           elif [ -f "Dockerfile" ]; then
             BACKEND_DIR="."
           else
-            echo "❌ Cannot find Dockerfile in repo root or event-backend/"
+            echo "❌ Dockerfile not found in repo root or event-backend/"
             ls -la
             exit 1
           fi
           echo "BACKEND_DIR=$BACKEND_DIR" >> "$GITHUB_ENV"
           echo "Using BACKEND_DIR=$BACKEND_DIR"
           ls -la "$BACKEND_DIR"
+
+      # ดึง JAR artifact มาใส่ใน context (รองรับ Dockerfile ที่ COPY JAR)
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          path: ./_dist
+
+      - name: Show downloaded JARs
+        run: ls -la ./_dist || true
+
+      - name: Copy JAR into Docker context (if Dockerfile expects it)
+        shell: bash
+        run: |
+          # ถ้ามี JAR และมีโฟลเดอร์ build/libs ให้ย้ายเข้าไป
+          mkdir -p "${{ env.BACKEND_DIR }}/build/libs"
+          if compgen -G "./_dist/*.jar" > /dev/null; then
+            cp ./_dist/*.jar "${{ env.BACKEND_DIR }}/build/libs/"
+            echo "✔ Copied JAR into ${{ env.BACKEND_DIR }}/build/libs/"
+          else
+            echo "ℹ No JAR found in ./_dist; assuming Dockerfile builds from source."
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -129,3 +202,52 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  # 4) E2E / Smoke Test แบบง่าย ด้วย container จริง
+  e2e_smoke:
+    name: "E2E Smoke (containerized)"
+    needs: docker_build_push
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    steps:
+      - name: Login to GHCR (pull image for test)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine image tag
+        id: img
+        run: |
+          # ใช้ sha tag ของ commit นี้
+          echo "TAG=${{ env.IMAGE_NAME }}:sha-${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Run container
+        run: |
+          docker pull "${{ steps.img.outputs.TAG }}"
+          # NOTE: เปลี่ยนพอร์ต/ENV ตามแอปจริง (เช่น SPRING_PROFILES_ACTIVE)
+          docker run -d --rm -p 8080:8080 --name app-under-test "${{ steps.img.outputs.TAG }}"
+          # รอให้แอปบูต
+          sleep 10
+
+      - name: Smoke check (health endpoint with retry)
+        shell: bash
+        run: |
+          set -e
+          for i in {1..12}; do
+            echo "Try #$i: GET /actuator/health"
+            if curl -fsS http://localhost:8080/actuator/health | tee /dev/stderr | grep -qi '"status":"UP"'; then
+              echo "✔ Health is UP"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "❌ Health check failed"
+          docker logs app-under-test || true
+          exit 1
+
+      - name: Stop container
+        if: always()
+        run: docker stop app-under-test || true
