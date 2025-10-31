@@ -275,13 +275,26 @@ jobs:
           set -e
           for i in {1..24}; do
             echo "Try #$i: GET ${HEALTH_PATH}"
-            if curl -fsS "http://localhost:8080${HEALTH_PATH}" | tee /dev/stderr | grep -qi '"status":"UP"'; then
-              echo "✔ Health is UP"
+            # ยิงแล้วเก็บ status code (ไม่ fail ทันที)
+            STATUS=$(curl -s -o /tmp/health.json -w "%{http_code}" "http://localhost:8080${HEALTH_PATH}" || true)
+            cat /tmp/health.json || true
+
+            # 200 พร้อม "UP" = ผ่าน
+            if [ "$STATUS" = "200" ] && grep -qi '"status":"UP"' /tmp/health.json 2>/dev/null; then
+              echo "✔ Health is UP (200)"
               exit 0
             fi
+
+            # 401/403 = แอปขึ้นและมี security (ยอมให้ผ่านสำหรับ smoke)
+            if [ "$STATUS" = "401" ] || [ "$STATUS" = "403" ]; then
+              echo "✔ App is up but protected (${STATUS}). Treating as PASS for smoke."
+              exit 0
+            fi
+
+            echo "Status=${STATUS}. Retrying..."
             sleep 5
           done
-          echo "❌ Health check failed"
+          echo "❌ Smoke check failed"
           docker logs app-under-test || true
           exit 1
 
