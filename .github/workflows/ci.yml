@@ -6,10 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
-# ชื่อ image สำหรับ GHCR
+# ชื่อ image สำหรับ GHCR (บังคับ lowercase ตั้งแต่ต้น)
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/event-backend
-
+  IMAGE_NAME: ghcr.io/${{ toLower(github.repository_owner) }}/event-backend
 
 # ป้องกันการรันชนกันบน branch เดียวกัน
 concurrency:
@@ -17,7 +16,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # 1) รัน Unit Test แยกต่างหาก (ถ้าพังให้หยุดตั้งแต่ตรงนี้)
+  # -------------------------------------------------------------------
+  # 1) Unit Test: รันเฉพาะเทสต์ (เร็ว และ fail ไว)
+  # -------------------------------------------------------------------
   unit_test:
     name: "Unit Test (Gradle)"
     runs-on: ubuntu-latest
@@ -28,6 +29,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ตรวจหาโฟลเดอร์โปรเจกต์จาก gradlew
       - name: Detect backend dir (find gradlew)
         shell: bash
         run: |
@@ -59,7 +61,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # ✅ รัน unit test เท่านั้น (เร็ว, ชัดเจน)
       - name: Run unit tests
         working-directory: ${{ env.BACKEND_DIR }}
         run: ./gradlew test --no-daemon
@@ -71,7 +72,9 @@ jobs:
           name: unit-test-reports
           path: ${{ env.BACKEND_DIR }}/build/reports/tests/test
 
-  # 2) Build JAR (ไม่รันเทสต์ซ้ำ)
+  # -------------------------------------------------------------------
+  # 2) Build JAR: ข้ามเทสต์ (เพราะทดสอบไปแล้ว)
+  # -------------------------------------------------------------------
   build_jar:
     name: "Assemble JAR (-x test)"
     needs: unit_test
@@ -112,7 +115,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # ✅ build อย่างเดียว ไม่รัน test อีกรอบ
       - name: Gradle assemble (no tests)
         working-directory: ${{ env.BACKEND_DIR }}
         run: ./gradlew clean assemble -x test --no-daemon
@@ -124,7 +126,9 @@ jobs:
           path: |
             ${{ env.BACKEND_DIR }}/build/libs/*.jar
 
-  # 3) สร้างและ push Docker image ไป GHCR
+  # -------------------------------------------------------------------
+  # 3) Docker: Build & Push ไป GHCR (tag: long+short SHA, + latest)
+  # -------------------------------------------------------------------
   docker_build_push:
     name: "Build & Push to GHCR"
     needs: [unit_test, build_jar]
@@ -133,7 +137,6 @@ jobs:
       contents: read
       packages: write
     steps:
-          
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -160,21 +163,17 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: backend-jar
-          path: ./_dist
-
-      - name: Show downloaded JARs
-        run: ls -la ./_dist || true
+        # ใช้ path เริ่มต้น (โฟลเดอร์ตามชื่อ artifact)
 
       - name: Copy JAR into Docker context (if Dockerfile expects it)
         shell: bash
         run: |
-          # ถ้ามี JAR และมีโฟลเดอร์ build/libs ให้ย้ายเข้าไป
           mkdir -p "${{ env.BACKEND_DIR }}/build/libs"
-          if compgen -G "./_dist/*.jar" > /dev/null; then
-            cp ./_dist/*.jar "${{ env.BACKEND_DIR }}/build/libs/"
+          if compgen -G "./backend-jar/*.jar" > /dev/null; then
+            cp ./backend-jar/*.jar "${{ env.BACKEND_DIR }}/build/libs/"
             echo "✔ Copied JAR into ${{ env.BACKEND_DIR }}/build/libs/"
           else
-            echo "ℹ No JAR found in ./_dist; assuming Dockerfile builds from source."
+            echo "ℹ No JAR found in ./backend-jar; assuming Dockerfile builds from source."
           fi
 
       - name: Set up Docker Buildx
@@ -187,13 +186,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Tag ครบ: long SHA + short SHA + latest(เฉพาะ default branch)
       - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=sha
+            type=sha,format=long
+            type=sha,format=short
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build & Push
@@ -204,8 +205,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-  # 4) E2E / Smoke Test แบบง่าย ด้วย container จริง
+  # -------------------------------------------------------------------
+  # 4) E2E / Smoke Test: ดึง image จาก GHCR แล้วรัน health check
+  #    - พยายาม pull tag แบบ long ก่อน ถ้าไม่เจอค่อยลอง short
+  # -------------------------------------------------------------------
   e2e_smoke:
     name: "E2E Smoke (containerized)"
     needs: docker_build_push
@@ -213,9 +219,6 @@ jobs:
     permissions:
       packages: read
     steps:
-      - name: Normalize image name to lowercase
-        run: |
-          echo "IMAGE_NAME=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
       - name: Login to GHCR (pull image for test)
         uses: docker/login-action@v3
         with:
@@ -223,27 +226,41 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Determine image tag
-        id: img
+      - name: Pull image (try long then short)
+        env:
+          IMG: ${{ env.IMAGE_NAME }}
         run: |
-          # ใช้ sha tag ของ commit นี้
-          echo "TAG=${{ env.IMAGE_NAME }}:sha-${{ github.sha }}" >> $GITHUB_OUTPUT
+          set -e
+          SHA_LONG="sha-${GITHUB_SHA}"
+          SHA_SHORT="sha-$(echo "${GITHUB_SHA}" | cut -c1-7)"
+
+          echo "Trying long tag: ${IMG}:${SHA_LONG}"
+          if docker pull "${IMG}:${SHA_LONG}"; then
+            echo "TAG=${IMG}:${SHA_LONG}" >> $GITHUB_ENV
+          else
+            echo "Long tag not found, trying short tag: ${IMG}:${SHA_SHORT}"
+            docker pull "${IMG}:${SHA_SHORT}"
+            echo "TAG=${IMG}:${SHA_SHORT}" >> $GITHUB_ENV
+          fi
 
       - name: Run container
+        env:
+          APP_PORT: "8080"              # ปรับตามพอร์ตจริงใน container
+          HEALTH_PATH: "/actuator/health"  # ปรับเป็น /healthz หรืออื่น ๆ ได้
         run: |
-          docker pull "${{ steps.img.outputs.TAG }}"
-          # NOTE: เปลี่ยนพอร์ต/ENV ตามแอปจริง (เช่น SPRING_PROFILES_ACTIVE)
-          docker run -d --rm -p 8080:8080 --name app-under-test "${{ steps.img.outputs.TAG }}"
-          # รอให้แอปบูต
-          sleep 10
+          set -e
+          docker run -d --rm -p 8080:8080 --name app-under-test "${TAG}"
+          echo "Container started. Waiting for readiness..."
 
       - name: Smoke check (health endpoint with retry)
+        env:
+          HEALTH_PATH: "/actuator/health"
         shell: bash
         run: |
           set -e
-          for i in {1..12}; do
-            echo "Try #$i: GET /actuator/health"
-            if curl -fsS http://localhost:8080/actuator/health | tee /dev/stderr | grep -qi '"status":"UP"'; then
+          for i in {1..24}; do
+            echo "Try #$i: GET ${HEALTH_PATH}"
+            if curl -fsS "http://localhost:8080${HEALTH_PATH}" | tee /dev/stderr | grep -qi '"status":"UP"'; then
               echo "✔ Health is UP"
               exit 0
             fi
