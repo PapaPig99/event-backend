@@ -14,9 +14,10 @@ public class Registration {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    // FK → users.email
+    // ========== RELATIONSHIPS ==========
+
     @Column(nullable = false)
-    private String email;
+    private String email; // FK ไป users.email
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "email", referencedColumnName = "email", insertable = false, updatable = false)
@@ -34,18 +35,30 @@ public class Registration {
     @JoinColumn(name = "zone_id", nullable = false)
     private EventZone zone;
 
+    // ========== PRICE & PAYMENT ==========
+
+    @Column(name = "price", nullable = false, precision = 10, scale = 2)
+    private BigDecimal price = BigDecimal.ZERO; // ราคาต่อใบ
+
+    @Column(name = "total_price", nullable = false, precision = 10, scale = 2)
+    private BigDecimal totalPrice = BigDecimal.ZERO; // ราคารวมทั้งออเดอร์
+
+    @Column(name = "payment_reference")
+    private String paymentReference; // ใช้เชื่อมหลาย ticket ในคำสั่งเดียวกัน
+
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_status", nullable = false)
     private PayStatus paymentStatus = PayStatus.UNPAID;
 
-    @Column(name = "total_price", nullable = false, precision = 10, scale = 2)
-    private BigDecimal totalPrice = BigDecimal.ZERO;
-
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
 
+
     @Column(name = "ticket_code", nullable = false, unique = true)
     private String ticketCode;
+
+    @Column(name = "quantity", nullable = false)
+    private Integer quantity = 1; // จำนวนบัตรในคำสั่งนี้ (เช่น 3 ใบ)
 
     @Column(name = "is_checked_in")
     private Boolean isCheckedIn = false;
@@ -56,13 +69,8 @@ public class Registration {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    @Column(name = "seat_number")
-    private Integer seatNumber; // ที่นั่ง (เฉพาะ zone ที่มี seat)
+    // ========== GETTERS / SETTERS ==========
 
-    @Column(name = "quantity", nullable = false)
-    private Integer quantity = 1; // จำนวนบัตร (กรณี zone ไม่มี seat number)
-
-    // ===== Getters / Setters =====
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
 
@@ -81,17 +89,26 @@ public class Registration {
     public EventZone getZone() { return zone; }
     public void setZone(EventZone zone) { this.zone = zone; }
 
-    public PayStatus getPaymentStatus() { return paymentStatus; }
-    public void setPaymentStatus(PayStatus paymentStatus) { this.paymentStatus = paymentStatus; }
+    public BigDecimal getPrice() { return price; }
+    public void setPrice(BigDecimal price) { this.price = price; }
 
     public BigDecimal getTotalPrice() { return totalPrice; }
     public void setTotalPrice(BigDecimal totalPrice) { this.totalPrice = totalPrice; }
+
+    public String getPaymentReference() { return paymentReference; }
+    public void setPaymentReference(String paymentReference) { this.paymentReference = paymentReference; }
+
+    public PayStatus getPaymentStatus() { return paymentStatus; }
+    public void setPaymentStatus(PayStatus paymentStatus) { this.paymentStatus = paymentStatus; }
 
     public LocalDateTime getPaidAt() { return paidAt; }
     public void setPaidAt(LocalDateTime paidAt) { this.paidAt = paidAt; }
 
     public String getTicketCode() { return ticketCode; }
     public void setTicketCode(String ticketCode) { this.ticketCode = ticketCode; }
+
+    public Integer getQuantity() { return quantity; }
+    public void setQuantity(Integer quantity) { this.quantity = quantity; }
 
     public Boolean getIsCheckedIn() { return isCheckedIn; }
     public void setIsCheckedIn(Boolean isCheckedIn) { this.isCheckedIn = isCheckedIn; }
@@ -101,10 +118,4 @@ public class Registration {
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
-
-    public Integer getSeatNumber() { return seatNumber; }
-    public void setSeatNumber(Integer seatNumber) { this.seatNumber = seatNumber; }
-
-    public Integer getQuantity() { return quantity; }
-    public void setQuantity(Integer quantity) { this.quantity = quantity; }
 }

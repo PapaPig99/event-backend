@@ -14,5 +14,4 @@ public class ZoneTemplateDto {
     private String groupName;
     private Integer capacity;
     private BigDecimal price;
-    private Boolean hasSeatNumbers;
 }

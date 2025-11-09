@@ -15,6 +15,8 @@ import java.util.stream.Collectors;
 
 /**
  * Service หลักสำหรับจัดการ Event (สร้าง / อ่าน / อัปเดต / ลบ)
+ * --------------------------------------------------------------
+ * รองรับการสร้าง event พร้อม session และ zones (ทั้งจาก template และ custom)
  */
 @Service
 @RequiredArgsConstructor
@@ -28,7 +30,7 @@ public class EventService {
     private final ZoneTemplateService zoneTemplateService;
 
     /* ==========================================================
-       READ : ดึงรายการ Event ทั้งหมด (สำหรับหน้า Admin/Overview)
+       READ : ดึงรายการ Event ทั้งหมด (หน้า Overview / Admin)
        ========================================================== */
     @Transactional(readOnly = true)
     public List<EventSummaryView> list() {
@@ -36,7 +38,7 @@ public class EventService {
     }
 
     /* ==========================================================
-       READ : ดึงรายละเอียด Event ทั้งหมด + Sessions + Zones
+       READ : ดึงรายละเอียด Event พร้อม Sessions + Zones
        ========================================================== */
     @Transactional(readOnly = true)
     public EventDetailDto get(Integer id) {
@@ -55,8 +57,7 @@ public class EventService {
                                         z.getName(),
                                         z.getGroupName(),
                                         z.getCapacity(),
-                                        z.getPrice(),
-                                        z.getHasSeatNumbers()
+                                        z.getPrice()
                                 ))
                                 .toList()
                 ))
@@ -84,6 +85,7 @@ public class EventService {
         setImagesFromUploadsOrDto(e, dto, poster, seatmap);
         Event savedEvent = eventRepo.save(e);
 
+        //  สร้าง sessions
         if (dto.sessions() != null) {
             for (SessionDto s : dto.sessions()) {
                 EventSession session = new EventSession();
@@ -92,11 +94,11 @@ public class EventService {
                 session.setStartTime(s.startTime());
                 EventSession savedSession = sessionRepo.save(session);
 
-                // ใช้ template
+                //  ใช้ template
                 if (Boolean.TRUE.equals(s.useZoneTemplate())) {
                     zoneTemplateService.cloneZonesToSession(savedSession.getId());
                 }
-                // ใช้ zones custom
+                // ใช้ custom zones
                 else if (s.zones() != null && !s.zones().isEmpty()) {
                     for (ZoneDto z : s.zones()) {
                         EventZone zone = new EventZone();
@@ -105,7 +107,6 @@ public class EventService {
                         zone.setGroupName(z.groupName());
                         zone.setCapacity(z.capacity());
                         zone.setPrice(z.price());
-                        zone.setHasSeatNumbers(z.hasSeatNumbers());
                         zoneRepo.save(zone);
                     }
                 }
@@ -143,7 +144,7 @@ public class EventService {
                 session.setStartTime(s.startTime());
                 EventSession savedSession = sessionRepo.save(session);
 
-                // ลบ zone เดิมทั้งหมดก่อน
+                // ลบ zone เดิมก่อนเพิ่มใหม่
                 var oldZones = zoneRepo.findBySession_Id(savedSession.getId());
                 zoneRepo.deleteAll(oldZones);
 
@@ -160,7 +161,6 @@ public class EventService {
                         zone.setGroupName(z.groupName());
                         zone.setCapacity(z.capacity());
                         zone.setPrice(z.price());
-                        zone.setHasSeatNumbers(z.hasSeatNumbers());
                         zoneRepo.save(zone);
                     }
                 }
@@ -184,7 +184,7 @@ public class EventService {
     }
 
     /* ==========================================================
-       UTILITIES : ฟังก์ชันช่วย
+       UTILITIES : ฟังก์ชันช่วยภายใน
        ========================================================== */
     private static void applyCoreFields(Event e, EventUpsertRequest dto) {
         e.setTitle(dto.title());
@@ -226,7 +226,7 @@ public class EventService {
     }
 
     /* ==========================================================
-       READ 2 : ใช้ในฝั่งผู้ชม event (view page)
+       READ (ฝั่ง Public View)
        ========================================================== */
     @Transactional(readOnly = true)
     public EventDetailViewDto getView(Integer id) {
@@ -245,8 +245,7 @@ public class EventService {
                                         z.getName(),
                                         z.getGroupName(),
                                         z.getCapacity(),
-                                        z.getPrice(),
-                                        z.getHasSeatNumbers()
+                                        z.getPrice()
                                 ))
                                 .toList()
                 ))
@@ -269,6 +268,9 @@ public class EventService {
         );
     }
 
+    /* ==========================================================
+       HELPER FUNCTIONS
+       ========================================================== */
     private EventSaleStatus computeSaleStatus(Event e) {
         LocalDateTime now = LocalDateTime.now();
 

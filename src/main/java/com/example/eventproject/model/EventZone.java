@@ -26,8 +26,6 @@ public class EventZone {
     @Column(nullable = false)
     private BigDecimal price;
 
-    @Column(name = "has_seat_numbers", nullable = false)
-    private Boolean hasSeatNumbers = false;
 
     // ===== Getters / Setters =====
 
@@ -48,7 +46,4 @@ public class EventZone {
 
     public BigDecimal getPrice() { return price; }
     public void setPrice(BigDecimal price) { this.price = price; }
-
-    public Boolean getHasSeatNumbers() { return hasSeatNumbers; }
-    public void setHasSeatNumbers(Boolean hasSeatNumbers) { this.hasSeatNumbers = hasSeatNumbers; }
 }

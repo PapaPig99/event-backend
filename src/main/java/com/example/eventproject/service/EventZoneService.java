@@ -9,10 +9,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-/**
- * Service สำหรับจัดการข้อมูลโซน (EventZone)
- * เช่น ดูความจุ, จำนวนที่ถูกจอง, หมายเลขที่นั่งที่ถูกจอง, และกลุ่มโซน
- */
 @Service
 @RequiredArgsConstructor
 public class EventZoneService {
@@ -20,52 +16,27 @@ public class EventZoneService {
     private final EventZoneRepository zoneRepository;
 
     /* ==========================================================
-       READ : ดูความจุ/การจองในแต่ละ session
+       READ : ดูความจุ/จำนวนที่ถูกจองในแต่ละ session
        ========================================================== */
     @Transactional(readOnly = true)
     public List<ZoneAvailabilityDto> getAvailabilityBySession(Integer sessionId) {
-
-        // ดึงข้อมูลโซนทั้งหมดพร้อมจำนวนที่ถูกจอง และราคา
-        var availabilityList = zoneRepository.findAvailabilityBySession(sessionId);
-
-        // ดึงหมายเลขที่นั่งที่ถูกจองแล้วใน session เดียวกัน
-        var bookedNums = zoneRepository.findBookedSeatNumbers(sessionId);
-
-        // สร้าง DTO สำหรับส่งกลับ โดยแยกกรณีมี/ไม่มีที่นั่ง
-        return availabilityList.stream().map(zone -> {
-            if (zone.hasSeatNumbers()) {
-                // ถ้ามีหมายเลขที่นั่ง → ใส่รายการเลขที่จองแล้ว
-                return new ZoneAvailabilityDto(
-                        zone.zoneId(),
-                        zone.zoneName(),
-                        zone.capacity(),
-                        zone.booked(),
-                        zone.available(),
-                        zone.hasSeatNumbers(),
-                        bookedNums,
-                        zone.price()
-                );
-            } else {
-                // ถ้าไม่มีหมายเลขที่นั่ง → bookedSeatNumbers เป็น List เปล่า
-                return new ZoneAvailabilityDto(
-                        zone.zoneId(),
-                        zone.zoneName(),
-                        zone.capacity(),
-                        zone.booked(),
-                        zone.available(),
-                        zone.hasSeatNumbers(),
-                        List.of(),
-                        zone.price()
-                );
-            }
-        }).toList();
+        // ดึงข้อมูลโซนทั้งหมดใน session พร้อมยอดจอง/คงเหลือ
+        return zoneRepository.findAvailabilityBySession(sessionId);
     }
 
     /* ==========================================================
-       READ : ดูโซนทั้งหมดใน group เดียวกัน
+       READ : ดูโซนทั้งหมดใน group เดียวกันของ session
        ========================================================== */
     @Transactional(readOnly = true)
     public List<EventZone> getZonesByGroup(Integer sessionId, String groupName) {
         return zoneRepository.findBySession_IdAndGroupName(sessionId, groupName);
+    }
+
+    /* ==========================================================
+       READ : ดึงโซนทั้งหมดของ session (เช่น admin ใช้จัดการ)
+       ========================================================== */
+    @Transactional(readOnly = true)
+    public List<EventZone> getZonesBySession(Integer sessionId) {
+        return zoneRepository.findBySession_Id(sessionId);
     }
 }

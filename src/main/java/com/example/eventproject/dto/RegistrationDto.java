@@ -3,20 +3,35 @@ package com.example.eventproject.dto;
 import com.example.eventproject.model.Registration;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public class RegistrationDto {
 
     /* ---------- CREATE ---------- */
     // ใช้สำหรับ POST /api/registrations
+    // สร้างหลายใบใน zone เดียว (แต่จ่ายครั้งเดียว)
     public record CreateRequest(
             Integer eventId,
             Integer sessionId,
             Integer zoneId,
-            Integer quantity,       // กรณีโซนไม่มี seat number
-            Integer seatNumber      // กรณีโซนมี seat number
+            Integer quantity
     ) {}
 
-    /* ---------- RESPONSE ---------- */
+    /* ---------- CREATE RESPONSE (หลายใบ) ---------- */
+    public record CreateResponse(
+            String paymentReference,
+            Integer eventId,
+            Integer sessionId,
+            Integer zoneId,
+            String zoneName,
+            BigDecimal pricePerTicket,
+            Integer quantity,
+            BigDecimal totalPrice,
+            String paymentStatus,
+            List<String> ticketCodes
+    ) {}
+
+    /* ---------- INDIVIDUAL TICKET RESPONSE ---------- */
     public record Response(
             Integer id,
             String email,
@@ -24,9 +39,9 @@ public class RegistrationDto {
             Integer sessionId,
             Integer zoneId,
             String zoneName,
-            Integer seatNumber,
-            Integer quantity,
+            String paymentReference,
             String paymentStatus,
+            BigDecimal price,
             BigDecimal totalPrice,
             LocalDateTime paidAt,
             String ticketCode,
@@ -42,9 +57,9 @@ public class RegistrationDto {
                     reg.getSession() != null ? reg.getSession().getId() : null,
                     reg.getZone() != null ? reg.getZone().getId() : null,
                     reg.getZone() != null ? reg.getZone().getName() : null,
-                    reg.getSeatNumber(),
-                    reg.getQuantity(),
+                    reg.getPaymentReference(),
                     reg.getPaymentStatus() != null ? reg.getPaymentStatus().name() : null,
+                    reg.getPrice(),
                     reg.getTotalPrice(),
                     reg.getPaidAt(),
                     reg.getTicketCode(),
@@ -55,10 +70,16 @@ public class RegistrationDto {
         }
     }
 
-    /* ---------- CONFIRM ---------- */
-    // ใช้สำหรับ PATCH /api/registrations/{id}/confirm
+    /* ---------- CONFIRM PAYMENT ---------- */
+    // ใช้สำหรับ PATCH /api/registrations/confirm
     public record ConfirmRequest(
             String paymentReference
     ) {}
 
+    public record ConfirmResponse(
+            String paymentReference,
+            String paymentStatus,
+            LocalDateTime paidAt,
+            BigDecimal totalPrice
+    ) {}
 }

@@ -7,6 +7,5 @@ public record ZoneDto(
         String name,
         String groupName,
         Integer capacity,
-        BigDecimal price,
-        Boolean hasSeatNumbers
+        BigDecimal price
 ) {}

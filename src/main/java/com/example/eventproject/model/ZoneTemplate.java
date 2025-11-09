@@ -27,9 +27,6 @@ public class ZoneTemplate {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
 
-    @Column(name = "has_seat_numbers", nullable = false)
-    private Boolean hasSeatNumbers = false;
-
     // ===== Getters / Setters =====
 
     public Integer getId() { return id; }
@@ -47,6 +44,4 @@ public class ZoneTemplate {
     public BigDecimal getPrice() { return price; }
     public void setPrice(BigDecimal price) { this.price = price; }
 
-    public Boolean getHasSeatNumbers() { return hasSeatNumbers; }
-    public void setHasSeatNumbers(Boolean hasSeatNumbers) { this.hasSeatNumbers = hasSeatNumbers; }
 }

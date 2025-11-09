@@ -55,7 +55,6 @@ public class ZoneTemplateService {
             zone.setGroupName(tpl.getGroupName());
             zone.setCapacity(tpl.getCapacity());
             zone.setPrice(tpl.getPrice());
-            zone.setHasSeatNumbers(tpl.getHasSeatNumbers());
             zoneRepository.save(zone);
         }
     }
