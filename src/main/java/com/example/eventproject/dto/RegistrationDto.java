@@ -1,13 +1,15 @@
 package com.example.eventproject.dto;
 
+import com.example.eventproject.model.Registration;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-
-import com.example.eventproject.model.Registration;
+import java.util.List;
 
 public class RegistrationDto {
 
-    // POST /api/registrations
+    /* ---------- CREATE ---------- */
+    // ใช้สำหรับ POST /api/registrations
+    // สร้างหลายใบใน zone เดียว (แต่จ่ายครั้งเดียว)
     public record CreateRequest(
             Integer eventId,
             Integer sessionId,
@@ -15,59 +17,69 @@ public class RegistrationDto {
             Integer quantity
     ) {}
 
-    // Response DTO
-    public record Response(
-            Integer id,
-            Integer userId,
+    /* ---------- CREATE RESPONSE (หลายใบ) ---------- */
+    public record CreateResponse(
+            String paymentReference,
             Integer eventId,
             Integer sessionId,
             Integer zoneId,
             String zoneName,
+            BigDecimal pricePerTicket,
             Integer quantity,
-            String registrationStatus,
-            String paymentStatus,
-            BigDecimal unitPrice,
             BigDecimal totalPrice,
-            LocalDateTime holdExpiresAt,
-            LocalDateTime registeredAt,
-            LocalDateTime updatedAt,
-            LocalDateTime paidAt,
+            String paymentStatus,
+            List<String> ticketCodes
+    ) {}
+
+    /* ---------- INDIVIDUAL TICKET RESPONSE ---------- */
+    public record Response(
+            Integer id,
+            String email,
+            Integer eventId,
+            Integer sessionId,
+            Integer zoneId,
+            String zoneName,
             String paymentReference,
-            String cancelledReason,
-            UserDto user
+            String paymentStatus,
+            BigDecimal price,
+            BigDecimal totalPrice,
+            LocalDateTime paidAt,
+            String ticketCode,
+            Boolean isCheckedIn,
+            LocalDateTime checkedInAt,
+            LocalDateTime createdAt
     ) {
-        // แปลงจาก Entity -> DTO
         public static Response from(Registration reg) {
             return new Response(
                     reg.getId(),
-                    reg.getUserId(), // ถ้ามี relation reg.getUser() ก็ยังคงเก็บ userId แยกได้
+                    reg.getEmail(),
                     reg.getEvent() != null ? reg.getEvent().getId() : null,
                     reg.getSession() != null ? reg.getSession().getId() : null,
                     reg.getZone() != null ? reg.getZone().getId() : null,
-                    reg.getZone().getName(),
-                    reg.getQuantity(),
-                    reg.getRegistrationStatus() != null ? reg.getRegistrationStatus().name() : null,
-                    reg.getPaymentStatus() != null ? reg.getPaymentStatus().name() : null,
-                    reg.getUnitPrice(),
-                    reg.getTotalPrice(),
-                    reg.getHoldExpiresAt(),
-                    reg.getRegisteredAt(),
-                    reg.getUpdatedAt(),
-                    reg.getPaidAt(),
+                    reg.getZone() != null ? reg.getZone().getName() : null,
                     reg.getPaymentReference(),
-                    reg.getCancelledReason() != null ? reg.getCancelledReason().name() : null,
-                    UserDto.from(reg.getUser())
+                    reg.getPaymentStatus() != null ? reg.getPaymentStatus().name() : null,
+                    reg.getPrice(),
+                    reg.getTotalPrice(),
+                    reg.getPaidAt(),
+                    reg.getTicketCode(),
+                    reg.getIsCheckedIn(),
+                    reg.getCheckedInAt(),
+                    reg.getCreatedAt()
             );
         }
     }
 
-    // PATCH /api/registrations/{id}/confirm
+    /* ---------- CONFIRM PAYMENT ---------- */
+    // ใช้สำหรับ PATCH /api/registrations/confirm
     public record ConfirmRequest(
             String paymentReference
     ) {}
 
-    // PATCH /api/registrations/{id}/cancel
-    public record CancelRequest(
-            String reason
+    public record ConfirmResponse(
+            String paymentReference,
+            String paymentStatus,
+            LocalDateTime paidAt,
+            BigDecimal totalPrice
     ) {}
 }

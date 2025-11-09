@@ -18,7 +18,6 @@ public interface EventSummaryView {
     String getDoorOpenTime();
     String getDescription();
     String getPosterImageUrl();
-    String getDetailImageUrl();
     String getSeatmapImageUrl();
+    LocalDateTime getCreatedAt();
 }
-

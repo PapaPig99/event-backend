@@ -33,6 +33,9 @@ public class AuthService {
         this.jwt = jwt;
     }
 
+    /* ==========================================================
+       REGISTER — สมัครสมาชิกใหม่
+       ========================================================== */
     public AuthResponse register(RegisterRequest req) {
         String email = (req.email() == null ? "" : req.email()).trim().toLowerCase();
         if (email.isEmpty()) {
@@ -42,16 +45,16 @@ public class AuthService {
             throw new IllegalArgumentException("Email already in use");
         }
 
+        // หา role USER จากตาราง roles
         Role userRole = roles.findByCode("USER").orElse(null);
 
+        // สร้าง user ใหม่
         User u = new User();
         u.setEmail(email);
         u.setPassword(encoder.encode(req.password()));
         u.setName(req.name());
-        u.setPhone(req.phone());
-        u.setOrganization(req.organization());
         if (userRole != null) {
-            u.setRoles(Set.of(userRole));
+            u.setRole(userRole);
         }
 
         users.save(u);
@@ -59,9 +62,12 @@ public class AuthService {
         String roleCode = userRole != null ? userRole.getCode() : "USER";
         String token = jwt.create(u.getEmail(), roleCode);
 
-        return new AuthResponse(token, u.getId(), u.getEmail(), u.getName(), roleCode);
+        return new AuthResponse(token, u.getEmail(), u.getName(), roleCode);
     }
 
+    /* ==========================================================
+       LOGIN — เข้าสู่ระบบ
+       ========================================================== */
     public AuthResponse login(LoginRequest req) {
         String email = (req.email() == null ? "" : req.email()).trim().toLowerCase();
         String raw = req.password() == null ? "" : req.password();
@@ -91,13 +97,15 @@ public class AuthService {
             throw new ResponseStatusException(UNAUTHORIZED, "INVALID_CREDENTIALS");
         }
 
-        // เลือก role แรก ถ้าไม่มีให้เป็น USER (normalize ไม่ต้องมี ROLE_ ก็ได้ เพราะ JwtAuthFilter จะเติมให้)
+        // เลือก role แรก ถ้าไม่มีให้เป็น USER
+        // ===== เลือก role จาก user ถ้าไม่มีให้เป็น USER =====
         String roleCode = "USER";
-        if (u.getRoles() != null && !u.getRoles().isEmpty()) {
-            roleCode = u.getRoles().stream().findFirst().map(Role::getCode).orElse("USER");
+        if (u.getRole() != null && u.getRole().getCode() != null) {
+            roleCode = u.getRole().getCode();
         }
 
         String token = jwt.create(u.getEmail(), roleCode);
-        return new AuthResponse(token, u.getId(), u.getEmail(), u.getName(), roleCode);
+        return new AuthResponse(token, u.getEmail(), u.getName(), roleCode);
+
     }
 }

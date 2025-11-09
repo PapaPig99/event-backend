@@ -1,54 +1,62 @@
 package com.example.eventproject.repository;
 
-import com.example.eventproject.dto.PriceDto;
-import org.springframework.data.repository.query.Param;
+import com.example.eventproject.dto.ZoneAvailabilityDto;
 import com.example.eventproject.model.EventZone;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.jpa.repository.Query;
-import com.example.eventproject.dto.ZoneAvailabilityDto;
-
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+/**
+ * Repository สำหรับจัดการข้อมูลโซน (EventZone)
+ * --------------------------------------------------------
+ * ใช้ดึงข้อมูลโซนของแต่ละ session เช่น ความจุ, ราคา, จำนวนที่ถูกจอง
+ */
+@Repository
 public interface EventZoneRepository extends JpaRepository<EventZone, Integer> {
 
-    @Modifying
-    @Transactional
-    @Query("delete from EventZone z where z.event.id = :eventId")
-    void deleteByEventId(@Param("eventId") Integer eventId);
-
+    /**
+     * ดึงข้อมูลโซนทั้งหมดใน session พร้อมจำนวนที่ถูกจอง และราคา
+     * ใช้ในหน้าเลือกโซนหรือดูความจุของรอบ (session)
+     *
+     * @param sessionId ID ของ session ที่ต้องการดู
+     * @return รายการ ZoneAvailabilityDto สำหรับทุกโซนใน session
+     */
     @Query("""
-    SELECT new com.example.eventproject.dto.ZoneAvailabilityDto(
-      z.id,
-      z.name,
-      z.capacity,
-      COALESCE(SUM(r.quantity), 0),
-      (z.capacity - COALESCE(SUM(r.quantity), 0))
-    )
-    FROM EventZone z
-      JOIN EventSession s
-           ON s.id = :sessionId
-          AND s.event = z.event
-      LEFT JOIN Registration r
-           ON r.zone = z
-          AND r.session = s
-          AND r.registrationStatus IN ('PENDING','CONFIRMED')
-          AND r.paymentStatus     IN ('UNPAID','PAID')
-    GROUP BY z.id, z.name, z.capacity
-    ORDER BY z.id
+        SELECT new com.example.eventproject.dto.ZoneAvailabilityDto(
+            z.id,
+            z.name,
+            z.capacity,
+            COUNT(r.id),
+            (z.capacity - COUNT(r.id)),
+            z.price
+        )
+        FROM EventZone z
+        LEFT JOIN Registration r
+          ON r.zone.id = z.id
+         AND r.session.id = :sessionId
+         AND r.paymentStatus IN ('UNPAID', 'PAID')
+        WHERE z.session.id = :sessionId
+        GROUP BY z.id, z.name, z.capacity, z.price
+        ORDER BY z.id
     """)
     List<ZoneAvailabilityDto> findAvailabilityBySession(@Param("sessionId") Integer sessionId);
 
-    @Query("""
-        select new com.example.eventproject.dto.PriceDto(z.price)
-        from EventZone z
-        where z.event.id = :eventId
-    """)
-    List<PriceDto> findPricesByEventId(@Param("eventId") Integer eventId);
+    /**
+     * ดึง zone ทั้งหมดใน group เดียวกันภายใน session
+     * เช่น กลุ่ม VIP, GOLD, SILVER ในรอบเดียวกัน
+     *
+     * @param sessionId ID ของ session
+     * @param groupName ชื่อกลุ่มโซน (group_name)
+     */
+    List<EventZone> findBySession_IdAndGroupName(Integer sessionId, String groupName);
 
-    List<EventZone> findByEventId(Integer eventId);
-
+    /**
+     * ดึง zone ทั้งหมดของ session (ใช้ใน service update/delete)
+     *
+     * @param sessionId ID ของ session
+     */
+    List<EventZone> findBySession_Id(Integer sessionId);
 }
-

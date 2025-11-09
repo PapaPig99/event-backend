@@ -8,97 +8,114 @@ import java.time.LocalDateTime;
 @Table(name = "registrations")
 public class Registration {
 
-    public enum RegStatus { PENDING, CONFIRMED, CANCELLED }
     public enum PayStatus { UNPAID, PAID }
-    public enum CancelledReason { PAYMENT_TIMEOUT, USER_CANCELLED }
 
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "user_id", nullable = false)
-    private Integer userId;
+    // ========== RELATIONSHIPS ==========
+
+    @Column(nullable = false)
+    private String email; // FK ไป users.email
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", insertable = false, updatable = false)
+    @JoinColumn(name = "email", referencedColumnName = "email", insertable = false, updatable = false)
     private User user;
 
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "event_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_id", nullable = false)
     private Event event;
 
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "session_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "session_id", nullable = false)
     private EventSession session;
 
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "zone_id")
-    private EventZone zone; // nullable
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "zone_id", nullable = false)
+    private EventZone zone;
 
-    private Integer quantity;
+    // ========== PRICE & PAYMENT ==========
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "registration_status", nullable = false)
-    private RegStatus registrationStatus = RegStatus.PENDING;
+    @Column(name = "price", nullable = false, precision = 10, scale = 2)
+    private BigDecimal price = BigDecimal.ZERO; // ราคาต่อใบ
+
+    @Column(name = "total_price", nullable = false, precision = 10, scale = 2)
+    private BigDecimal totalPrice = BigDecimal.ZERO; // ราคารวมทั้งออเดอร์
+
+    @Column(name = "payment_reference")
+    private String paymentReference; // ใช้เชื่อมหลาย ticket ในคำสั่งเดียวกัน
 
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_status", nullable = false)
     private PayStatus paymentStatus = PayStatus.UNPAID;
 
-    @Column(name = "hold_expires_at")
-    private LocalDateTime holdExpiresAt;
-
-    @Column(name = "payment_reference")
-    private String paymentReference;
-
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
 
-    @Column(name = "unit_price", nullable = false)
-    private BigDecimal unitPrice = BigDecimal.ZERO;
 
-    @Column(name = "total_price", nullable = false)
-    private BigDecimal totalPrice = BigDecimal.ZERO;
+    @Column(name = "ticket_code", nullable = false, unique = true)
+    private String ticketCode;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "cancelled_reason")
-    private CancelledReason cancelledReason;
+    @Column(name = "quantity", nullable = false)
+    private Integer quantity = 1; // จำนวนบัตรในคำสั่งนี้ (เช่น 3 ใบ)
 
-    @Column(name = "registered_at")
-    private LocalDateTime registeredAt;
+    @Column(name = "is_checked_in")
+    private Boolean isCheckedIn = false;
 
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
+    @Column(name = "checked_in_at")
+    private LocalDateTime checkedInAt;
 
-    // getters/setters
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    // ========== GETTERS / SETTERS ==========
+
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
-    public Integer getUserId() { return userId; }
-    public User getUser() { return user; }
 
-    public void setUserId(Integer userId) { this.userId = userId; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
+
     public Event getEvent() { return event; }
     public void setEvent(Event event) { this.event = event; }
+
     public EventSession getSession() { return session; }
     public void setSession(EventSession session) { this.session = session; }
+
     public EventZone getZone() { return zone; }
     public void setZone(EventZone zone) { this.zone = zone; }
-    public Integer getQuantity() { return quantity; }
-    public void setQuantity(Integer quantity) { this.quantity = quantity; }
-    public RegStatus getRegistrationStatus() { return registrationStatus; }
-    public void setRegistrationStatus(RegStatus registrationStatus) { this.registrationStatus = registrationStatus; }
-    public PayStatus getPaymentStatus() { return paymentStatus; }
-    public void setPaymentStatus(PayStatus paymentStatus) { this.paymentStatus = paymentStatus; }
-    public LocalDateTime getHoldExpiresAt() { return holdExpiresAt; }
-    public void setHoldExpiresAt(LocalDateTime holdExpiresAt) { this.holdExpiresAt = holdExpiresAt; }
-    public String getPaymentReference() { return paymentReference; }
-    public void setPaymentReference(String paymentReference) { this.paymentReference = paymentReference; }
-    public LocalDateTime getPaidAt() { return paidAt; }
-    public void setPaidAt(LocalDateTime paidAt) { this.paidAt = paidAt; }
-    public BigDecimal getUnitPrice() { return unitPrice; }
-    public void setUnitPrice(BigDecimal unitPrice) { this.unitPrice = unitPrice; }
+
+    public BigDecimal getPrice() { return price; }
+    public void setPrice(BigDecimal price) { this.price = price; }
+
     public BigDecimal getTotalPrice() { return totalPrice; }
     public void setTotalPrice(BigDecimal totalPrice) { this.totalPrice = totalPrice; }
-    public CancelledReason getCancelledReason() { return cancelledReason; }
-    public void setCancelledReason(CancelledReason cancelledReason) { this.cancelledReason = cancelledReason; }
-    public LocalDateTime getRegisteredAt() { return registeredAt; }
-    public void setRegisteredAt(LocalDateTime registeredAt) { this.registeredAt = registeredAt; }
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public String getPaymentReference() { return paymentReference; }
+    public void setPaymentReference(String paymentReference) { this.paymentReference = paymentReference; }
+
+    public PayStatus getPaymentStatus() { return paymentStatus; }
+    public void setPaymentStatus(PayStatus paymentStatus) { this.paymentStatus = paymentStatus; }
+
+    public LocalDateTime getPaidAt() { return paidAt; }
+    public void setPaidAt(LocalDateTime paidAt) { this.paidAt = paidAt; }
+
+    public String getTicketCode() { return ticketCode; }
+    public void setTicketCode(String ticketCode) { this.ticketCode = ticketCode; }
+
+    public Integer getQuantity() { return quantity; }
+    public void setQuantity(Integer quantity) { this.quantity = quantity; }
+
+    public Boolean getIsCheckedIn() { return isCheckedIn; }
+    public void setIsCheckedIn(Boolean isCheckedIn) { this.isCheckedIn = isCheckedIn; }
+
+    public LocalDateTime getCheckedInAt() { return checkedInAt; }
+    public void setCheckedInAt(LocalDateTime checkedInAt) { this.checkedInAt = checkedInAt; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

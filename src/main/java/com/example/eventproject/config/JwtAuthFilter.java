@@ -1,7 +1,7 @@
 package com.example.eventproject.config;
 
 import java.io.IOException;
-import java.util.List;          // ปรับแพ็กเกจให้ตรงโปรเจกต์
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -9,7 +9,6 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import com.example.eventproject.model.Role;
 import com.example.eventproject.model.User;
 import com.example.eventproject.repository.UserRepository;
 
@@ -31,12 +30,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest req,
                                     HttpServletResponse res,
-                                    FilterChain chain) throws ServletException, IOException {
+                                    FilterChain chain)
+            throws ServletException, IOException {
 
         final String path = req.getServletPath();
         final String method = req.getMethod();
 
-        // ===== BYPASS เส้นทางที่ไม่ควรตรวจ JWT =====
+        // ===== BYPASS เส้นทางที่ไม่ต้องตรวจ JWT =====
         if ("OPTIONS".equalsIgnoreCase(method)
                 || path.startsWith("/api/auth/")
                 || path.startsWith("/v3/api-docs")
@@ -49,51 +49,53 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return;
         }
 
-        // ===== ถ้าเคย Authenticated แล้ว ให้ไปต่อได้เลย =====
+        // ===== ถ้ามี Authentication อยู่แล้ว ให้ไปต่อเลย =====
         if (SecurityContextHolder.getContext().getAuthentication() != null) {
             chain.doFilter(req, res);
             return;
         }
 
         // ===== อ่าน Authorization header =====
-        String auth = req.getHeader("Authorization");
-        if (auth == null || !auth.startsWith("Bearer ")) {
-            // ไม่มี header ก็ปล่อยผ่าน (อย่าเขียน 401 ตรงนี้)
+        String authHeader = req.getHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             chain.doFilter(req, res);
             return;
         }
 
-        String token = auth.substring(7);
-        String email = null;
+        String token = authHeader.substring(7);
+        String email;
 
         try {
-            // คืน email หรือ null ถ้า invalid/expired
             email = jwtUtil.validateAndGetSubject(token);
         } catch (Exception ex) {
-            // token ผิดรูป/หมดอายุ → ปล่อยผ่านให้ไปโดน 401/403 ตาม rule ปลายทาง
             chain.doFilter(req, res);
             return;
         }
 
         if (email != null) {
-            Optional<User> userOpt = userRepo.findByEmail(email); // ปรับเมธอดตามจริง
+            Optional<User> userOpt = userRepo.findByEmail(email);
             if (userOpt.isPresent()) {
                 User user = userOpt.get();
 
-                // สร้างสิทธิ์ โดย normalize ให้เป็น ROLE_XXX เสมอ
-                List<SimpleGrantedAuthority> authorities =
-                        (user.getRoles() == null || user.getRoles().isEmpty())
-                                ? List.of(new SimpleGrantedAuthority("ROLE_USER"))
-                                : user.getRoles().stream()
-                                      .map(Role::getCode)                               // "ADMIN" หรือ "ROLE_ADMIN"
-                                      .map(r -> r.startsWith("ROLE_") ? r : "ROLE_" + r) // normalize
-                                      .map(SimpleGrantedAuthority::new)
-                                      .toList();
+                // normalize role เป็น ROLE_XXX
+                String roleCode = (user.getRole() != null)
+                        ? user.getRole().getCode()
+                        : "USER";
 
-                String primaryRole = authorities.get(0).getAuthority().replaceFirst("^ROLE_", "");
+                String normalizedRole = roleCode.startsWith("ROLE_")
+                        ? roleCode
+                        : "ROLE_" + roleCode;
 
-                // CurrentUser เป็นคลาสของโปรเจกต์เดิม — ใช้งานต่อได้
-                CurrentUser principal = new CurrentUser(user.getId(), user.getEmail(), primaryRole, authorities);
+                var authorities = List.of(new SimpleGrantedAuthority(normalizedRole));
+                String primaryRole = normalizedRole.replaceFirst("^ROLE_", "");
+
+                // ใช้ email แทน id
+                CurrentUser principal = new CurrentUser(
+                        user.getEmail(),
+                        user.getName(),
+                        primaryRole,
+                        authorities
+                );
 
                 UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(principal, null, authorities);

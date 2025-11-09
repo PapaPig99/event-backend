@@ -18,8 +18,6 @@ public record  EventUpsertRequest(
         String doorOpenTime,
         String description,
         String posterImageUrl,
-        String detailImageUrl,
         String seatmapImageUrl,
-        List<SessionDto> sessions,
-        List<ZoneDto> zones
+        List<SessionDto> sessions
 ) {}

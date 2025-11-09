@@ -1,9 +1,9 @@
 package com.example.eventproject.dto;
 
+import com.example.eventproject.model.Status;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import com.example.eventproject.model.Status;
 
 public record EventDetailDto(
         Integer id,
@@ -19,10 +19,7 @@ public record EventDetailDto(
         String doorOpenTime,
         String description,
         String posterImageUrl,
-        String detailImageUrl,
         String seatmapImageUrl,
-        List<SessionDto> sessions,
-        List<ZoneDto> zones
+        LocalDateTime createdAt,
+        List<SessionDto> sessions
 ) {}
-
-
