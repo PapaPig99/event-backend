@@ -3,27 +3,28 @@ package com.example.eventproject.model;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 
+/**
+ * Entity ของแม่แบบโซน (Zone Template)
+ * ใช้สำหรับ clone ไปยัง EventZone ของแต่ละ session
+ */
 @Entity
-@Table(name = "event_zones")
-public class EventZone {
+@Table(name = "zone_templates")
+public class ZoneTemplate {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "session_id", nullable = false)
-    private EventSession session;
-
     @Column(nullable = false)
     private String name;
 
+    @Column(name = "group_name")
     private String groupName;
 
     @Column(nullable = false)
     private Integer capacity;
 
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
 
     @Column(name = "has_seat_numbers", nullable = false)
@@ -33,9 +34,6 @@ public class EventZone {
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
-
-    public EventSession getSession() { return session; }
-    public void setSession(EventSession session) { this.session = session; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

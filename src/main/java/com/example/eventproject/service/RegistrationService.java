@@ -1,155 +1,178 @@
 package com.example.eventproject.service;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.List;
-
+import com.example.eventproject.model.*;
+import com.example.eventproject.repository.*;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.example.eventproject.dto.RegistrationDto;
-import com.example.eventproject.model.Event;
-import com.example.eventproject.model.EventSession;
-import com.example.eventproject.model.Registration;
-import com.example.eventproject.repository.EventZoneRepository;
-import com.example.eventproject.repository.RegistrationRepository;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
 
-import lombok.RequiredArgsConstructor;
-
+/**
+ * Service ชั้นกลางสำหรับจัดการการจองตั๋ว (Registration)
+ * รวม logic ธุรกิจ เช่น ตรวจความจุ, ตรวจที่นั่งซ้ำ, อัปเดตสถานะการชำระเงิน
+ */
 @Service
 @RequiredArgsConstructor
 public class RegistrationService {
 
     private final RegistrationRepository registrationRepository;
-    private final EventZoneRepository eventZoneRepository;
+    private final EventRepository eventRepository;
+    private final EventSessionRepository sessionRepository;
+    private final EventZoneRepository zoneRepository;
+    private final UserRepository userRepository;
 
+    /* ==========================================================
+       CREATE REGISTRATION — สร้างรายการจองใหม่
+       ========================================================== */
     @Transactional
-    public Registration create(RegistrationDto.CreateRequest req, Integer userId) {
-        if (req.quantity() == null || req.quantity() <= 0) {
-            throw new IllegalArgumentException("quantity must be > 0");
+    public Registration create(String email,
+                               Integer eventId,
+                               Integer sessionId,
+                               Integer zoneId,
+                               Integer seatNumber,
+                               Integer quantity) {
+
+        // 1️ ตรวจสอบว่าผู้ใช้, event, session, zone มีอยู่จริง
+        var user = userRepository.findById(email)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        var event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found"));
+        var session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new IllegalArgumentException("Session not found"));
+        var zone = zoneRepository.findById(zoneId)
+                .orElseThrow(() -> new IllegalArgumentException("Zone not found"));
+
+        // 2 ตรวจสอบจำนวนที่จองแล้วในโซนนี้ (รวม UNPAID + PAID)
+        int totalBooked = registrationRepository.countAllBookedInZone(zoneId);
+        if (totalBooked + quantity > zone.getCapacity()) {
+            throw new IllegalStateException("Zone " + zone.getName() + " is fully booked");
         }
 
-        var zone = eventZoneRepository.findById(req.zoneId())
-                .orElseThrow(() -> new IllegalArgumentException("zone not found"));
-
-        // === กันจองซ้ำใน session เดียวกันของผู้ใช้เดียวกัน ===
-        var now = LocalDateTime.now();
-        var conflicts = registrationRepository.findActiveOrConfirmedForUserAndSession(
-                userId, req.sessionId(), now);
-        if (!conflicts.isEmpty()) {
-            var latest = conflicts.isEmpty() ? null : conflicts.get(0);
-            throw new IllegalStateException(
-                    "You already have a booking for this session (status=" +
-                            latest.getRegistrationStatus() + ", id=" + latest.getId() + ")");
+        // 3️ ถ้าโซนนี้เป็นแบบมีหมายเลขที่นั่ง ต้องตรวจที่ซ้ำด้วย
+        if (zone.getHasSeatNumbers() != null && zone.getHasSeatNumbers() && seatNumber != null) {
+            int existing = registrationRepository.countExistingSeat(zoneId, seatNumber);
+            if (existing > 0) {
+                throw new IllegalStateException("Seat number " + seatNumber + " is already booked");
+            }
         }
 
-        var reg = new Registration();
-        reg.setUserId(userId);
-        reg.setEvent(new Event(req.eventId()));
-        reg.setSession(new EventSession(req.sessionId()));
+
+        // 4️สร้าง registration entity ใหม่
+        Registration reg = new Registration();
+        reg.setEmail(email);
+        reg.setUser(user);
+        reg.setEvent(event);
+        reg.setSession(session);
         reg.setZone(zone);
-        reg.setQuantity(req.quantity());
-        reg.setRegistrationStatus(Registration.RegStatus.PENDING);
+        reg.setQuantity(quantity != null ? quantity : 1);
+        reg.setSeatNumber(seatNumber);
+        reg.setTotalPrice(zone.getPrice().multiply(
+                java.math.BigDecimal.valueOf(reg.getQuantity())
+        ));
+        reg.setTicketCode(generateTicketCode());
         reg.setPaymentStatus(Registration.PayStatus.UNPAID);
-        reg.setRegisteredAt(now);
-        reg.setHoldExpiresAt(now.plusMinutes(10));
-        reg.setUnitPrice(zone.getPrice());
-        reg.setTotalPrice(zone.getPrice().multiply(BigDecimal.valueOf(req.quantity())));
+        reg.setCreatedAt(LocalDateTime.now());
 
+        // 5️ บันทึกลงฐานข้อมูล
         return registrationRepository.save(reg);
     }
 
+    /* ==========================================================
+       CONFIRM PAYMENT — ยืนยันการชำระเงิน
+       ========================================================== */
     @Transactional
-    public Registration confirm(Integer id, RegistrationDto.ConfirmRequest req, Integer userId) {
-        var reg = registrationRepository.findWithAllRelationsById(id)
-                .orElseThrow(() -> new IllegalArgumentException("not found"));
-        if (!reg.getUserId().equals(userId))
-            throw new SecurityException("forbidden");
-        if (reg.getRegistrationStatus() != Registration.RegStatus.PENDING)
-            throw new IllegalStateException("not PENDING");
-        if (reg.getHoldExpiresAt() != null && reg.getHoldExpiresAt().isBefore(LocalDateTime.now()))
-            throw new IllegalStateException("hold expired");
+    public Registration confirmPayment(Integer registrationId) {
+        // หา registration ที่ต้องการอัปเดต
+        Registration reg = registrationRepository.findById(registrationId)
+                .orElseThrow(() -> new IllegalArgumentException("Registration not found"));
 
-        reg.setRegistrationStatus(Registration.RegStatus.CONFIRMED);
+        // อัปเดตสถานะเป็น “PAID” และบันทึกเวลาชำระ
         reg.setPaymentStatus(Registration.PayStatus.PAID);
-        reg.setPaymentReference(req.paymentReference());
         reg.setPaidAt(LocalDateTime.now());
-        reg.setUpdatedAt(LocalDateTime.now());
         return registrationRepository.save(reg);
     }
 
+    /* ==========================================================
+    CHECK-IN BY TICKET CODE — สำหรับ Admin กรอก ticket code
+    ========================================================== */
     @Transactional
-    public Registration cancel(Integer id, RegistrationDto.CancelRequest req, Integer userId) {
-        var reg = registrationRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("registration not found"));
-        if (!reg.getUserId().equals(userId))
-            throw new SecurityException("forbidden");
-        if (reg.getRegistrationStatus() == Registration.RegStatus.CANCELLED)
-            return reg;
+    public Registration checkInByTicketCode(String ticketCode) {
+        // หา registration จาก ticket code
+        Registration reg = registrationRepository.findByTicketCode(ticketCode)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid ticket code: " + ticketCode));
 
-        var reason = Registration.CancelledReason.USER_CANCELLED;
-        if (req != null && req.reason() != null) {
-            try {
-                reason = Registration.CancelledReason.valueOf(req.reason());
-            } catch (Exception ignored) {
-            }
+        // ตรวจสอบว่ายังไม่ได้เช็กอิน
+        if (Boolean.TRUE.equals(reg.getIsCheckedIn())) {
+            throw new IllegalStateException("Ticket " + ticketCode + " has already been checked in.");
         }
-        reg.setRegistrationStatus(Registration.RegStatus.CANCELLED);
-        reg.setCancelledReason(reason);
-        reg.setUpdatedAt(LocalDateTime.now());
+
+        // ตรวจสอบสถานะการชำระเงิน
+        if (reg.getPaymentStatus() != Registration.PayStatus.PAID) {
+            throw new IllegalStateException("Ticket " + ticketCode + " has not been paid yet.");
+        }
+
+        // บันทึกเวลา check-in
+        reg.setIsCheckedIn(true);
+        reg.setCheckedInAt(LocalDateTime.now());
+
         return registrationRepository.save(reg);
     }
 
-    // user ดู (เฉพาะที่ "จ่ายแล้ว" ทุก event)
+
+
+    /* ==========================================================
+       READ — ดึงข้อมูลการจองในรูปแบบต่าง ๆ
+       ========================================================== */
     @Transactional(readOnly = true)
-    public List<RegistrationDto.Response> getByUserId(Integer userId, String status) {
-        List<Registration> regs;
-        if (status == null || status.isBlank()) {
-            regs = registrationRepository.findByUserIdAndPaymentStatusOrderByRegisteredAtDesc(
-                    userId, Registration.PayStatus.PAID);
-        } else {
-            Registration.RegStatus st;
-            try {
-                st = Registration.RegStatus.valueOf(status);
-            } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid status: " + status); // หรือ map เป็น 400 ด้วย
-                                                                                 // @ControllerAdvice
-            }
-            regs = registrationRepository.findByUserIdAndRegistrationStatusAndPaymentStatusOrderByRegisteredAtDesc(
-                    userId, st, Registration.PayStatus.PAID);
-        }
-        return regs.stream().map(RegistrationDto.Response::from).toList();
+    public List<Registration> getAll() {
+        // ดึงการจองทั้งหมด (ใช้ในหน้า admin)
+        return registrationRepository.findAll();
     }
 
-    // Regis ตาม event
     @Transactional(readOnly = true)
-    public List<RegistrationDto.Response> getAllByEvent(Integer eventId, String status) {
-        List<Registration> regs;
-        if (status == null || status.isBlank()) {
-            regs = registrationRepository.findByEvent_IdAndPaymentStatusOrderByRegisteredAtDesc(
-                    eventId, Registration.PayStatus.PAID);
-        } else {
-            var st = Registration.RegStatus.valueOf(status.toUpperCase());
-            regs = registrationRepository.findByEvent_IdAndRegistrationStatusAndPaymentStatusOrderByRegisteredAtDesc(
-                    eventId, st, Registration.PayStatus.PAID);
-        }
-        return regs.stream().map(RegistrationDto.Response::from).toList();
+    public List<Registration> getPaidByEvent(Integer eventId) {
+        // ดึงเฉพาะรายการที่จ่ายแล้วของอีเวนต์
+        return registrationRepository.findByEvent_IdAndPaymentStatusOrderByCreatedAtDesc(
+                eventId, Registration.PayStatus.PAID);
     }
 
-    // Regis ตาม event และ session
     @Transactional(readOnly = true)
-    public List<RegistrationDto.Response> getAllByEventAndSession(Integer eventId, Integer sessionId, String status) {
-        List<Registration> regs;
-        if (status == null || status.isBlank()) {
-            regs = registrationRepository.findByEvent_IdAndSession_IdAndPaymentStatusOrderByRegisteredAtDesc(
-                    eventId, sessionId, Registration.PayStatus.PAID);
-        } else {
-            var st = Registration.RegStatus.valueOf(status.toUpperCase());
-            regs = registrationRepository
-                    .findByEvent_IdAndSession_IdAndRegistrationStatusAndPaymentStatusOrderByRegisteredAtDesc(
-                            eventId, sessionId, st, Registration.PayStatus.PAID);
-        }
-        return regs.stream().map(RegistrationDto.Response::from).toList();
+    public List<Registration> getPaidByUser(String email) {
+        // ดึงเฉพาะรายการที่จ่ายแล้วของผู้ใช้
+        return registrationRepository.findByEmailAndPaymentStatusOrderByCreatedAtDesc(
+                email, Registration.PayStatus.PAID);
     }
 
+    @Transactional(readOnly = true)
+    public List<Registration> getPaidByEventAndSession(Integer eventId, Integer sessionId) {
+        // ดึงเฉพาะรายการที่จ่ายแล้วของอีเวนต์ + รอบ (session)
+        return registrationRepository.findByEvent_IdAndSession_IdAndPaymentStatusOrderByCreatedAtDesc(
+                eventId, sessionId, Registration.PayStatus.PAID);
+    }
+
+    /* ==========================================================
+       DELETE — ลบข้อมูลทั้งหมดของอีเวนต์ (เมื่อ event ถูกลบ)
+       ========================================================== */
+    @Transactional
+    public int deleteAllByEventCascade(Integer eventId) {
+        return registrationRepository.deleteAllByEventCascade(eventId);
+    }
+
+    /* ==========================================================
+       UTILITIES — ฟังก์ชันช่วย เช่น generate ticket code
+       ========================================================== */
+    private String generateTicketCode() {
+        String code;
+        do {
+            code = UUID.randomUUID()
+                    .toString()
+                    .replace("-", "")
+                    .substring(0, 8)
+                    .toUpperCase();
+        } while (registrationRepository.findByTicketCode(code).isPresent());
+        return code;
+    }
 }

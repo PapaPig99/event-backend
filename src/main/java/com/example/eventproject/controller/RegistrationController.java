@@ -1,15 +1,17 @@
 package com.example.eventproject.controller;
 
-import com.example.eventproject.config.CurrentUser;
-import com.example.eventproject.dto.RegistrationDto;
 import com.example.eventproject.model.Registration;
 import com.example.eventproject.service.RegistrationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 
+/**
+ * Controller สำหรับจัดการการจองตั๋ว (Registration)
+ * รองรับ: จอง, ยืนยันชำระเงิน, เช็กอิน, ดูข้อมูล
+ */
 @RestController
 @RequestMapping("/api/registrations")
 @RequiredArgsConstructor
@@ -17,69 +19,82 @@ public class RegistrationController {
 
     private final RegistrationService registrationService;
 
-    // สร้างการจองใหม่ (PENDING/HOLD)
+    /* ==========================================================
+       CREATE : สร้างการจองใหม่
+       ========================================================== */
     @PostMapping
-    public ResponseEntity<RegistrationDto.Response> create(
-            @RequestBody RegistrationDto.CreateRequest req,
-            @AuthenticationPrincipal CurrentUser user
-    ) {
-        Registration reg = registrationService.create(req, user.getId().intValue());
-        return ResponseEntity.status(201).body(RegistrationDto.Response.from(reg));
+    public ResponseEntity<Registration> create(@RequestParam String email,
+                                               @RequestParam Integer eventId,
+                                               @RequestParam Integer sessionId,
+                                               @RequestParam Integer zoneId,
+                                               @RequestParam(required = false) Integer seatNumber,
+                                               @RequestParam(defaultValue = "1") Integer quantity) {
+
+        Registration reg = registrationService.create(email, eventId, sessionId, zoneId, seatNumber, quantity);
+        return ResponseEntity.status(201).body(reg);
     }
 
-    // ยืนยันการจ่ายเงิน (ต้องส่ง id ของ registration)
+    /* ==========================================================
+       CONFIRM PAYMENT : ยืนยันการชำระเงิน
+       ========================================================== */
     @PatchMapping("/{id}/confirm")
-    public ResponseEntity<RegistrationDto.Response> confirm(
-            @PathVariable Integer id,
-            @RequestBody RegistrationDto.ConfirmRequest req,
-            @AuthenticationPrincipal CurrentUser user
-    ) {
-        // ส่ง id เข้า service ด้วย
-        Registration reg = registrationService.confirm(id, req, user.getId().intValue());
-        return ResponseEntity.ok(RegistrationDto.Response.from(reg));
+    public ResponseEntity<Registration> confirmPayment(@PathVariable Integer id) {
+        Registration reg = registrationService.confirmPayment(id);
+        return ResponseEntity.ok(reg);
     }
 
-    // ยกเลิกการจอง (ต้องส่ง id ของ registration)
-    @PatchMapping("/{id}/cancel")
-    public ResponseEntity<RegistrationDto.Response> cancel(
-            @PathVariable Integer id,
-            @RequestBody(required = false) RegistrationDto.CancelRequest req,
-            @AuthenticationPrincipal CurrentUser user
-    ) {
-        // ส่ง id เข้า service ด้วย
-        Registration reg = registrationService.cancel(id, req, user.getId().intValue());
-        return ResponseEntity.ok(RegistrationDto.Response.from(reg));
+    /* ==========================================================
+    CHECK-IN (ADMIN INPUT) — ใช้ ticket code แทน id
+    ========================================================== */
+    @PatchMapping("/checkin/by-code")
+    public ResponseEntity<?> checkInByTicketCode(@RequestParam String ticketCode) {
+        try {
+            Registration reg = registrationService.checkInByTicketCode(ticketCode);
+            return ResponseEntity.ok("Ticket " + ticketCode + " checked in successfully.");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body("Invalid ticket code: " + ticketCode);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body("bad Request" + e.getMessage());
+        }
     }
 
-    // ดึงรายการจองของตัวเองทุก event
-    @GetMapping("/me")
-    public ResponseEntity<?> myRegs(
-            @AuthenticationPrincipal CurrentUser user,
-            @RequestParam(required = false) String status
-    ) {
-        return ResponseEntity.ok(
-                registrationService.getByUserId(user.getId().intValue(), status)
-        );
+
+
+    /* ==========================================================
+       READ : ดึงข้อมูลการจอง
+       ========================================================== */
+    // ดึงการจองทั้งหมด (admin)
+    @GetMapping
+    public ResponseEntity<List<Registration>> getAll() {
+        return ResponseEntity.ok(registrationService.getAll());
     }
-    // ดึงรายการจองของทุกuserที่จ่ายตังแล้ว ตามevent
+
+    // ดึงการจองของผู้ใช้ที่จ่ายแล้ว
+    @GetMapping("/user/{email}")
+    public ResponseEntity<List<Registration>> getPaidByUser(@PathVariable String email) {
+        return ResponseEntity.ok(registrationService.getPaidByUser(email));
+    }
+
+    // ดึงการจองที่จ่ายแล้วของอีเวนต์
     @GetMapping("/event/{eventId}")
-    public ResponseEntity<List<RegistrationDto.Response>> getAllByEvent(
-            @PathVariable Integer eventId,
-            @RequestParam(required = false) String status
-    ) {
-        var result = registrationService.getAllByEvent(eventId, status);
-        return ResponseEntity.ok(result);
-    }
-    // ดึงรายการจองของทุก user ที่จ่ายเงินแล้ว ตาม event + session
-    @GetMapping("/event/{eventId}/{sessionId}")
-    public ResponseEntity<List<RegistrationDto.Response>> getAllByEventAndSession(
-            @PathVariable Integer eventId,
-            @PathVariable Integer sessionId,
-            @RequestParam(required = false) String status
-    ) {
-        var result = registrationService.getAllByEventAndSession(eventId, sessionId, status);
-        return ResponseEntity.ok(result);
+    public ResponseEntity<List<Registration>> getPaidByEvent(@PathVariable Integer eventId) {
+        return ResponseEntity.ok(registrationService.getPaidByEvent(eventId));
     }
 
+    // ดึงการจองที่จ่ายแล้วของอีเวนต์ + session
+    @GetMapping("/event/{eventId}/session/{sessionId}")
+    public ResponseEntity<List<Registration>> getPaidByEventAndSession(
+            @PathVariable Integer eventId,
+            @PathVariable Integer sessionId) {
+        return ResponseEntity.ok(registrationService.getPaidByEventAndSession(eventId, sessionId));
+    }
 
+    /* ==========================================================
+       DELETE : ลบการจองทั้งหมดของ event (admin)
+       ========================================================== */
+    @DeleteMapping("/event/{eventId}")
+    public ResponseEntity<String> deleteAllByEvent(@PathVariable Integer eventId) {
+        int deleted = registrationService.deleteAllByEventCascade(eventId);
+        return ResponseEntity.ok("Deleted " + deleted + " registrations for event " + eventId);
+    }
 }

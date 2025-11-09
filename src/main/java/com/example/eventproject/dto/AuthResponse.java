@@ -1,4 +1,4 @@
 package com.example.eventproject.dto;
 
-public record AuthResponse(String token, Long userId, String email, String name, String role) {}
+public record AuthResponse(String token, String email, String name, String role) {}
 

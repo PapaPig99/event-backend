@@ -5,7 +5,8 @@ import java.math.BigDecimal;
 public record ZoneDto(
         Integer id,
         String name,
+        String groupName,
         Integer capacity,
-        BigDecimal price
+        BigDecimal price,
+        Boolean hasSeatNumbers
 ) {}
-

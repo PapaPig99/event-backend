@@ -2,21 +2,20 @@ package com.example.eventproject.service;
 
 import com.example.eventproject.dto.*;
 import com.example.eventproject.model.*;
-import com.example.eventproject.repository.EventRepository;
-import com.example.eventproject.repository.EventSessionRepository;
-import com.example.eventproject.repository.EventZoneRepository;
-import com.example.eventproject.repository.RegistrationRepository;
+import com.example.eventproject.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Service หลักสำหรับจัดการ Event (สร้าง / อ่าน / อัปเดต / ลบ)
+ */
 @Service
 @RequiredArgsConstructor
 public class EventService {
@@ -26,13 +25,19 @@ public class EventService {
     private final EventZoneRepository zoneRepo;
     private final FileStorageService fileStorageService;
     private final RegistrationRepository registrationRepository;
-    /* ========== READ ========== */
+    private final ZoneTemplateService zoneTemplateService;
 
+    /* ==========================================================
+       READ : ดึงรายการ Event ทั้งหมด (สำหรับหน้า Admin/Overview)
+       ========================================================== */
     @Transactional(readOnly = true)
     public List<EventSummaryView> list() {
         return eventRepo.findAllByOrderByStartDateAsc();
     }
 
+    /* ==========================================================
+       READ : ดึงรายละเอียด Event ทั้งหมด + Sessions + Zones
+       ========================================================== */
     @Transactional(readOnly = true)
     public EventDetailDto get(Integer id) {
         Event e = eventRepo.findDetailById(id)
@@ -40,162 +45,147 @@ public class EventService {
 
         var sessions = e.getSessions().stream()
                 .map(s -> new SessionDto(
-                        s.getId(), s.getName(), s.getStartTime(),
-                        s.getStatus()
-                )).toList();
-
-        var zones = e.getZones().stream()
-                .map(z -> new ZoneDto(z.getId(), z.getName(), z.getCapacity(), z.getPrice()))
+                        s.getId(),
+                        s.getName(),
+                        s.getStartTime(),
+                        isFromTemplate(s.getZones()),
+                        s.getZones().stream()
+                                .map(z -> new ZoneDto(
+                                        z.getId(),
+                                        z.getName(),
+                                        z.getGroupName(),
+                                        z.getCapacity(),
+                                        z.getPrice(),
+                                        z.getHasSeatNumbers()
+                                ))
+                                .toList()
+                ))
                 .toList();
 
         return new EventDetailDto(
                 e.getId(), e.getTitle(), e.getCategory(), e.getLocation(),
                 e.getStartDate(), e.getEndDate(), e.getStatus(),
                 e.getSaleStartAt(), e.getSaleEndAt(), e.isSaleUntilSoldout(),
-                e.getDoorOpenTime(),e.getDescription(), e.getPosterImageUrl(), e.getDetailImageUrl(),
-                e.getSeatmapImageUrl(), sessions, zones
+                e.getDoorOpenTime(), e.getDescription(),
+                e.getPosterImageUrl(), e.getSeatmapImageUrl(),
+                e.getCreatedAt(), sessions
         );
     }
 
-    /* ========== CREATE ========== */
-
+    /* ==========================================================
+       CREATE : สร้าง Event ใหม่ + Sessions + Zones
+       ========================================================== */
     @Transactional
     public Integer create(EventUpsertRequest dto,
-                          MultipartFile poster, MultipartFile detail, MultipartFile seatmap,Integer userId) {
+                          MultipartFile poster, MultipartFile seatmap, String email) {
+
         Event e = new Event();
         applyCoreFields(e, dto);
-        setImagesFromUploadsOrDto(e, dto, poster, detail, seatmap);
-
-            // กำหนดuserที่สร้างeventจาก token
-        e.setCreatedByUserId(userId);
-
-        Event saved = eventRepo.save(e);
+        setImagesFromUploadsOrDto(e, dto, poster, seatmap);
+        Event savedEvent = eventRepo.save(e);
 
         if (dto.sessions() != null) {
             for (SessionDto s : dto.sessions()) {
-                EventSession es = new EventSession();
-                es.setEvent(saved);
-                es.setName(s.name());
-                es.setStartTime(s.startTime());
-                es.setStatus(s.status());
-                sessionRepo.save(es);
+                EventSession session = new EventSession();
+                session.setEvent(savedEvent);
+                session.setName(s.name());
+                session.setStartTime(s.startTime());
+                EventSession savedSession = sessionRepo.save(session);
+
+                // ใช้ template
+                if (Boolean.TRUE.equals(s.useZoneTemplate())) {
+                    zoneTemplateService.cloneZonesToSession(savedSession.getId());
+                }
+                // ใช้ zones custom
+                else if (s.zones() != null && !s.zones().isEmpty()) {
+                    for (ZoneDto z : s.zones()) {
+                        EventZone zone = new EventZone();
+                        zone.setSession(savedSession);
+                        zone.setName(z.name());
+                        zone.setGroupName(z.groupName());
+                        zone.setCapacity(z.capacity());
+                        zone.setPrice(z.price());
+                        zone.setHasSeatNumbers(z.hasSeatNumbers());
+                        zoneRepo.save(zone);
+                    }
+                }
             }
         }
 
-        if (dto.zones() != null) {
-            for (ZoneDto z : dto.zones()) {
-                EventZone ez = new EventZone();
-                ez.setEvent(saved);
-                ez.setName(z.name());
-                ez.setCapacity(z.capacity());
-                ez.setPrice(z.price());
-                zoneRepo.save(ez);
-            }
-        }
-
-        return saved.getId();
+        return savedEvent.getId();
     }
 
-    /* ========== UPDATE ========== */
+    /* ==========================================================
+       UPDATE : แก้ไข Event + Sessions + Zones
+       ========================================================== */
     @Transactional
     public void update(Integer id, EventUpsertRequest dto,
-                       MultipartFile poster, MultipartFile detail, MultipartFile seatmap) {
+                       MultipartFile poster, MultipartFile seatmap) {
+
         Event e = eventRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + id));
 
-        // 1) core fields + images
         applyCoreFields(e, dto);
-        setImagesFromUploadsOrDto(e, dto, poster, detail, seatmap);
+        setImagesFromUploadsOrDto(e, dto, poster, seatmap);
         eventRepo.save(e);
 
-        // 2) SESSIONS
-        var existingSessions = sessionRepo.findByEventId(id);
-        var sessionById = existingSessions.stream()
-                .collect(java.util.stream.Collectors.toMap(EventSession::getId, s -> s));
+        var existingSessions = sessionRepo.findByEventId(id)
+                .stream().collect(Collectors.toMap(EventSession::getId, s -> s));
 
         if (dto.sessions() != null) {
             for (SessionDto s : dto.sessions()) {
-                if (s.id() != null && sessionById.containsKey(s.id())) {
-                    var es = sessionById.get(s.id());
-                    es.setName(s.name());
-                    es.setStartTime(s.startTime());
-                    es.setStatus(s.status());
-                    sessionRepo.save(es);
-                } else {
-                    var es = new EventSession();
-                    es.setEvent(e);
-                    es.setName(s.name());
-                    es.setStartTime(s.startTime());
-                    es.setStatus(s.status());
-                    sessionRepo.save(es);
+                EventSession session = (s.id() != null && existingSessions.containsKey(s.id()))
+                        ? existingSessions.get(s.id())
+                        : new EventSession();
+
+                session.setEvent(e);
+                session.setName(s.name());
+                session.setStartTime(s.startTime());
+                EventSession savedSession = sessionRepo.save(session);
+
+                // ลบ zone เดิมทั้งหมดก่อน
+                var oldZones = zoneRepo.findBySession_Id(savedSession.getId());
+                zoneRepo.deleteAll(oldZones);
+
+                // ใช้ template
+                if (Boolean.TRUE.equals(s.useZoneTemplate())) {
+                    zoneTemplateService.cloneZonesToSession(savedSession.getId());
                 }
-            }
-        }
-
-        // 3) ZONES
-        var existingZones = zoneRepo.findByEventId(id);
-        var zoneById = existingZones.stream()
-                .collect(java.util.stream.Collectors.toMap(EventZone::getId, z -> z));
-
-        if (dto.zones() != null) {
-            for (ZoneDto z : dto.zones()) {
-                if (z.id() != null && zoneById.containsKey(z.id())) {
-                    // UPDATE in-place
-                    var ez = zoneById.get(z.id());
-
-                    // กันแก้ capacity ต่ำกว่ายอดที่ถูกจอง/ขายไปแล้ว
-                    int reserved = registrationRepository.sumActiveQuantityByZone(z.id());
-                    if (z.capacity() < reserved) {
-                        throw new IllegalStateException(
-                                "Capacity cannot be less than reserved (" + reserved + ") in zone " + z.id()
-                        );
+                // ใช้ custom zones
+                else if (s.zones() != null && !s.zones().isEmpty()) {
+                    for (ZoneDto z : s.zones()) {
+                        EventZone zone = new EventZone();
+                        zone.setSession(savedSession);
+                        zone.setName(z.name());
+                        zone.setGroupName(z.groupName());
+                        zone.setCapacity(z.capacity());
+                        zone.setPrice(z.price());
+                        zone.setHasSeatNumbers(z.hasSeatNumbers());
+                        zoneRepo.save(zone);
                     }
-
-                    ez.setName(z.name());
-                    ez.setCapacity(z.capacity());
-                    ez.setPrice(z.price());
-                    zoneRepo.save(ez);
-                } else {
-                    // CREATE new
-                    var ez = new EventZone();
-                    ez.setEvent(e);
-                    ez.setName(z.name());
-                    ez.setCapacity(z.capacity());
-                    ez.setPrice(z.price());
-                    zoneRepo.save(ez);
                 }
             }
         }
     }
 
-
-
-
-    /* ========== DELETE ========== */
+    /* ==========================================================
+       DELETE : ลบ Event ทั้งหมด (รวม sessions / zones / regis)
+       ========================================================== */
     @Transactional
     public void delete(Integer id) {
         Event e = eventRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + id));
 
-        // 1) ลบไฟล์ประกอบ (เช็ค null/ว่างกันพลาดได้)
         fileStorageService.deleteFile(e.getPosterImageUrl());
-        fileStorageService.deleteFile(e.getDetailImageUrl());
         fileStorageService.deleteFile(e.getSeatmapImageUrl());
-
-        // 2) ลบ register ที่ผูกกับอีเวนต์นี้ก่อน
         registrationRepository.deleteAllByEventCascade(id);
-
-        // 3) ลบลูกตัวอื่น ๆ ของอีเวนต์ (ถ้ามี FK ไปหา session/zone ให้ลบ register ก่อนเสมอ)
-        sessionRepo.deleteByEventId(id);
-        zoneRepo.deleteByEventId(id);
-
-        // 4) สุดท้ายลบ event
+        sessionRepo.deleteByEvent_Id(id);
         eventRepo.delete(e);
     }
 
-
-    /* ========== Helpers ========== */
-
+    /* ==========================================================
+       UTILITIES : ฟังก์ชันช่วย
+       ========================================================== */
     private static void applyCoreFields(Event e, EventUpsertRequest dto) {
         e.setTitle(dto.title());
         e.setCategory(dto.category());
@@ -212,33 +202,18 @@ public class EventService {
 
     private void setImagesFromUploadsOrDto(
             Event e, EventUpsertRequest dto,
-            MultipartFile poster, MultipartFile detail, MultipartFile seatmap) {
+            MultipartFile poster, MultipartFile seatmap) {
 
-        // --- poster ---
         if (poster != null && !poster.isEmpty()) {
             String newUrl = fileStorageService.replaceFile(e.getPosterImageUrl(), poster);
             e.setPosterImageUrl(newUrl);
         } else if (dto.posterImageUrl() == null) {
-            // ผู้ใช้ตั้งใจลบ
             fileStorageService.deleteFile(e.getPosterImageUrl());
             e.setPosterImageUrl(null);
         } else {
-            // ผู้ใช้ส่ง URL เดิม/ใหม่มา (จาก client)
             e.setPosterImageUrl(dto.posterImageUrl());
         }
 
-        // --- detail ---
-        if (detail != null && !detail.isEmpty()) {
-            String newUrl = fileStorageService.replaceFile(e.getDetailImageUrl(), detail);
-            e.setDetailImageUrl(newUrl);
-        } else if (dto.detailImageUrl() == null) {
-            fileStorageService.deleteFile(e.getDetailImageUrl());
-            e.setDetailImageUrl(null);
-        } else {
-            e.setDetailImageUrl(dto.detailImageUrl());
-        }
-
-        // --- seatmap ---
         if (seatmap != null && !seatmap.isEmpty()) {
             String newUrl = fileStorageService.replaceFile(e.getSeatmapImageUrl(), seatmap);
             e.setSeatmapImageUrl(newUrl);
@@ -249,64 +224,71 @@ public class EventService {
             e.setSeatmapImageUrl(dto.seatmapImageUrl());
         }
     }
-    /* ========== Read 2 (event+salestatus+pricezone)========== */
+
+    /* ==========================================================
+       READ 2 : ใช้ในฝั่งผู้ชม event (view page)
+       ========================================================== */
     @Transactional(readOnly = true)
     public EventDetailViewDto getView(Integer id) {
         Event e = eventRepo.findDetailById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + id));
 
-        // ===== 1. map sessions =====
         var sessions = e.getSessions().stream()
                 .map(s -> new SessionDto(
-                        s.getId(), s.getName(), s.getStartTime(), s.getStatus()
-                )).toList();
+                        s.getId(),
+                        s.getName(),
+                        s.getStartTime(),
+                        isFromTemplate(s.getZones()),
+                        s.getZones().stream()
+                                .map(z -> new ZoneDto(
+                                        z.getId(),
+                                        z.getName(),
+                                        z.getGroupName(),
+                                        z.getCapacity(),
+                                        z.getPrice(),
+                                        z.getHasSeatNumbers()
+                                ))
+                                .toList()
+                ))
+                .toList();
 
-        // ===== 2. ราคาทุกzone =====
-        var prices = zoneRepo.findPricesByEventId(id);
+        var prices = zoneRepo.findAll().stream()
+                .map(z -> new PriceDto(z.getPrice()))
+                .distinct()
+                .toList();
 
-        // ===== 3. คำนวณสถานะการขาย =====
         EventSaleStatus saleStatus = computeSaleStatus(e);
 
-        // ===== 4. return DTO ใหม่ =====
         return new EventDetailViewDto(
                 e.getId(), e.getTitle(), e.getCategory(), e.getLocation(),
                 e.getStartDate(), e.getEndDate(), e.getStatus(),
                 e.getSaleStartAt(), e.getSaleEndAt(), e.isSaleUntilSoldout(),
                 e.getDoorOpenTime(), e.getDescription(),
-                e.getPosterImageUrl(), e.getDetailImageUrl(), e.getSeatmapImageUrl(),
-                sessions,
-                saleStatus,
-                prices
+                e.getPosterImageUrl(), e.getSeatmapImageUrl(),
+                e.getCreatedAt(), sessions, saleStatus, prices
         );
     }
+
     private EventSaleStatus computeSaleStatus(Event e) {
         LocalDateTime now = LocalDateTime.now();
 
-        // 0) ปิดทั้งอีเวนต์
         if (e.getStatus() == Status.CLOSED) return EventSaleStatus.CLOSED;
-
-        // 1) ยังไม่ถึงเวลาเริ่มขาย
-        if (e.getSaleStartAt() != null && now.isBefore(e.getSaleStartAt())) {
+        if (e.getSaleStartAt() != null && now.isBefore(e.getSaleStartAt()))
             return EventSaleStatus.UPCOMING;
-        }
-
-        // 2) ถ้าไม่ได้ขายจนหมด และถึง/เลยเวลา saleEndAt แล้ว → ปิด (inclusive)
-        if (!Boolean.TRUE.equals(e.isSaleUntilSoldout())
-                && e.getSaleEndAt() != null
-                && (now.isAfter(e.getSaleEndAt()) || now.isEqual(e.getSaleEndAt()))) {
+        if (!e.isSaleUntilSoldout() && e.getSaleEndAt() != null &&
+                (now.isAfter(e.getSaleEndAt()) || now.isEqual(e.getSaleEndAt())))
             return EventSaleStatus.CLOSED;
-        }
-
-        // 3) (ออปชัน) ถ้าอยากปิดหลังงานจบจริง ๆ
-        if (e.getEndDate() != null && LocalDate.now().isAfter(e.getEndDate())) {
+        if (e.getEndDate() != null && LocalDate.now().isAfter(e.getEndDate()))
             return EventSaleStatus.CLOSED;
-        }
-
-        // 4) อื่น ๆ = เปิดขาย
         return EventSaleStatus.OPEN;
     }
 
-
-
-
+    private boolean isFromTemplate(List<EventZone> zones) {
+        if (zones == null || zones.isEmpty()) return false;
+        List<String> templateNames = zoneTemplateService.getAllTemplateNames();
+        long matchCount = zones.stream()
+                .filter(z -> templateNames.contains(z.getName()))
+                .count();
+        return (double) matchCount / zones.size() >= 0.8;
+    }
 }

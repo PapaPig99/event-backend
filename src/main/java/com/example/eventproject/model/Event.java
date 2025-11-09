@@ -18,15 +18,23 @@ public class Event {
     private String category;
     private String location;
 
+    @Column(name = "start_date")
     private LocalDate startDate;
+
+    @Column(name = "end_date")
     private LocalDate endDate;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Status status = Status.OPEN;
+    private Status status = Status.CLOSED;
 
+    @Column(name = "sale_start_at")
     private LocalDateTime saleStartAt;
+
+    @Column(name = "sale_end_at")
     private LocalDateTime saleEndAt;
+
+    @Column(name = "sale_until_soldout")
     private boolean saleUntilSoldout;
 
     @Column(name = "door_open_time")
@@ -35,28 +43,25 @@ public class Event {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @Column(name = "poster_image_url")
     private String posterImageUrl;
-    private String detailImageUrl;
+
+    @Column(name = "seatmap_image_url")
     private String seatmapImageUrl;
 
-    @Column(name = "created_by_user_id", nullable = false)
-    private Integer createdByUserId;
+    @Column(name = "created_at", updatable = false, insertable = false)
+    private LocalDateTime createdAt;
 
-    // Relations
+    // --- Relations ---
     @OneToMany(mappedBy = "event", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("startTime asc")
     private Set<EventSession> sessions = new LinkedHashSet<>();
 
-    @OneToMany(mappedBy = "event", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
-    @OrderBy("name asc")
-    private Set<EventZone> zones = new LinkedHashSet<>();
+    // --- Constructors ---
+    public Event() {}
+    public Event(Integer id) { this.id = id; }
 
-    public Event()
-    {}
-    public Event(Integer id) {
-        this.id = id;
-    }
-    // --- getter/setter ---
+    // --- Getters/Setters ---
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
 
@@ -90,27 +95,18 @@ public class Event {
     public String getDoorOpenTime() { return doorOpenTime; }
     public void setDoorOpenTime(String doorOpenTime) { this.doorOpenTime = doorOpenTime; }
 
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+
     public String getPosterImageUrl() { return posterImageUrl; }
     public void setPosterImageUrl(String posterImageUrl) { this.posterImageUrl = posterImageUrl; }
-
-    public String getDetailImageUrl() { return detailImageUrl; }
-    public void setDetailImageUrl(String detailImageUrl) { this.detailImageUrl = detailImageUrl; }
 
     public String getSeatmapImageUrl() { return seatmapImageUrl; }
     public void setSeatmapImageUrl(String seatmapImageUrl) { this.seatmapImageUrl = seatmapImageUrl; }
 
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
     public Set<EventSession> getSessions() { return sessions; }
     public void setSessions(Set<EventSession> sessions) { this.sessions = sessions; }
-
-    public Set<EventZone> getZones() { return zones; }
-    public void setZones(Set<EventZone> zones) { this.zones = zones; }
-
-    public Integer getCreatedByUserId() {
-        return createdByUserId;
-    }
-    public void setCreatedByUserId(Integer createdByUserId) {
-        this.createdByUserId = createdByUserId;
-    }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
 }

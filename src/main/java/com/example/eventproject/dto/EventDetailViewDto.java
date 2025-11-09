@@ -21,8 +21,8 @@ public record EventDetailViewDto(
         String doorOpenTime,
         String description,
         String posterImageUrl,
-        String detailImageUrl,
         String seatmapImageUrl,
+        LocalDateTime getCreatedAt,
         List<SessionDto> sessions,
 
         EventSaleStatus saleStatus,

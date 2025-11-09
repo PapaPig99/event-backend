@@ -7,29 +7,29 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * ตัวแทนผู้ใช้ปัจจุบันที่อยู่ใน SecurityContext (principal)
+ * ตัวแทนผู้ใช้ปัจจุบันที่อยู่ใน SecurityContext
  */
 
 public class CurrentUser implements UserDetails {
 
-    private final Long id;
-    private final String email;
+    private final String email;   // ใช้แทน id
+    private final String name;
     private final String role;
     private final List<? extends GrantedAuthority> authorities;
 
-    public CurrentUser(Long id, String email, String role, List<? extends GrantedAuthority> authorities) {
-        this.id = id;
+    public CurrentUser(String email, String name, String role, List<? extends GrantedAuthority> authorities) {
         this.email = email;
+        this.name = name;
         this.role = role;
         this.authorities = authorities;
     }
 
-    public Long getId() {
-        return id;
-    }
-
     public String getEmail() {
         return email;
+    }
+
+    public String getName() {
+        return name;
     }
 
     public String getRole() {
@@ -41,8 +41,16 @@ public class CurrentUser implements UserDetails {
         return authorities;
     }
 
-    @Override public String getPassword() { return ""; }
-    @Override public String getUsername() { return email; }
+    @Override
+    public String getPassword() {
+        return "";
+    }
+
+    @Override
+    public String getUsername() {
+        return email;
+    }
+
     @Override public boolean isAccountNonExpired() { return true; }
     @Override public boolean isAccountNonLocked() { return true; }
     @Override public boolean isCredentialsNonExpired() { return true; }

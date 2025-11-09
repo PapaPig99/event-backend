@@ -67,12 +67,11 @@ public class EventController {
     public ResponseEntity<Void> create(
             @Valid @RequestPart("data") EventUpsertRequest dto,
             @RequestPart(value = "poster",  required = false) MultipartFile poster,
-            @RequestPart(value = "detail",  required = false) MultipartFile detail,
             @RequestPart(value = "seatmap", required = false) MultipartFile seatmap,
             @AuthenticationPrincipal CurrentUser user
     ) {
         // ส่ง userId ไปยัง service
-        Integer id = service.create(dto, poster, detail, seatmap, user.getId().intValue());
+        Integer id = service.create(dto, poster, seatmap, user.getEmail());
 
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}").buildAndExpand(id).toUri();
@@ -91,10 +90,9 @@ public class EventController {
             @PathVariable Integer id,
             @Valid @RequestPart("data") EventUpsertRequest dto,
             @RequestPart(value = "poster",  required = false) MultipartFile poster,
-            @RequestPart(value = "detail",  required = false) MultipartFile detail,
             @RequestPart(value = "seatmap", required = false) MultipartFile seatmap
     ) {
-        service.update(id, dto, poster, detail, seatmap);
+        service.update(id, dto, poster, seatmap);
         return ResponseEntity.noContent().build();
     }
 

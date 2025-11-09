@@ -1,10 +1,8 @@
 package com.example.eventproject.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-
 import java.time.LocalTime;
-import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Table(name = "event_sessions")
@@ -16,44 +14,22 @@ public class EventSession {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "event_id", nullable = false)
-    @JsonIgnore
     private Event event;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private String name;
 
     @Column(name = "start_time", nullable = false)
     private LocalTime startTime;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private Status status = Status.OPEN;   // enum(OPEN, CLOSED)
+    @Column(name = "use_zone_template", nullable = false)
+    private boolean useZoneTemplate = false;
 
-    @Column(name = "created_at")
-    private LocalDateTime createdAt;
+    // เชื่อมไป zones ทั้งหมดของ session นี้
+    @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<EventZone> zones;
 
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-
-
-    public EventSession() {}
-
-    public EventSession(Integer id) {
-        this.id = id;
-    }
-    // -------- lifecycle --------
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = this.createdAt;
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        this.updatedAt = LocalDateTime.now();
-    }
-
-    // -------- getters/setters --------
+    // ====== Getters / Setters ======
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
 
@@ -66,12 +42,9 @@ public class EventSession {
     public LocalTime getStartTime() { return startTime; }
     public void setStartTime(LocalTime startTime) { this.startTime = startTime; }
 
-    public Status getStatus() { return status; }
-    public void setStatus(Status status) { this.status = status; }
+    public boolean isUseZoneTemplate() { return useZoneTemplate; }
+    public void setUseZoneTemplate(boolean useZoneTemplate) { this.useZoneTemplate = useZoneTemplate; }
 
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
-
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+    public List<EventZone> getZones() { return zones; }
+    public void setZones(List<EventZone> zones) { this.zones = zones; }
 }
