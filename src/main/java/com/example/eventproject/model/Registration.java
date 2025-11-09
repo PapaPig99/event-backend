@@ -35,6 +35,8 @@ public class Registration {
     @JoinColumn(name = "zone_id", nullable = false)
     private EventZone zone;
 
+    private Integer quantity;
+
     // ========== PRICE & PAYMENT ==========
 
     @Column(name = "price", nullable = false, precision = 10, scale = 2)
@@ -57,8 +59,6 @@ public class Registration {
     @Column(name = "ticket_code", nullable = false, unique = true)
     private String ticketCode;
 
-    @Column(name = "quantity", nullable = false)
-    private Integer quantity = 1; // จำนวนบัตรในคำสั่งนี้ (เช่น 3 ใบ)
 
     @Column(name = "is_checked_in")
     private Boolean isCheckedIn = false;
@@ -89,6 +89,9 @@ public class Registration {
     public EventZone getZone() { return zone; }
     public void setZone(EventZone zone) { this.zone = zone; }
 
+    public Integer getQuantity() { return quantity; }
+    public void setQuantity(Integer quantity) { this.quantity = quantity; }
+
     public BigDecimal getPrice() { return price; }
     public void setPrice(BigDecimal price) { this.price = price; }
 
@@ -107,8 +110,6 @@ public class Registration {
     public String getTicketCode() { return ticketCode; }
     public void setTicketCode(String ticketCode) { this.ticketCode = ticketCode; }
 
-    public Integer getQuantity() { return quantity; }
-    public void setQuantity(Integer quantity) { this.quantity = quantity; }
 
     public Boolean getIsCheckedIn() { return isCheckedIn; }
     public void setIsCheckedIn(Boolean isCheckedIn) { this.isCheckedIn = isCheckedIn; }

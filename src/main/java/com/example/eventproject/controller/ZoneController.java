@@ -1,13 +1,19 @@
 package com.example.eventproject.controller;
 
+import java.util.List;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.example.eventproject.dto.ZoneAvailabilityDto;
 import com.example.eventproject.model.EventZone;
 import com.example.eventproject.service.EventZoneService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/zones")
@@ -31,6 +37,12 @@ public class ZoneController {
             @RequestParam String groupName) {
         var result = eventZoneService.getZonesByGroup(sessionId, groupName);
         return ResponseEntity.ok(result);
+    }
+    
+    private final EventZoneService zoneService;
+    @GetMapping("/session/{sessionId}/availability")
+    public ResponseEntity<?> getAvailability(@PathVariable Integer sessionId) {
+        return ResponseEntity.ok(zoneService.getAvailabilityBySession(sessionId));
     }
 }
 
