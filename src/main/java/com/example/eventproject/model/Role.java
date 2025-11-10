@@ -15,5 +15,5 @@ public class Role {
     private Integer id;
 
     @Column(nullable = false, unique = true, length = 50)
-    private String code; //  "ADMIN", "USER"
+    private String code; //  "ADMIN", "USER" , "GUEST"
 }

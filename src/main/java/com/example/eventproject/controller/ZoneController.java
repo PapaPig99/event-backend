@@ -22,8 +22,8 @@ public class ZoneController {
 
     private final EventZoneService eventZoneService;
 
-    /** GET /api/zones/session/{sessionId} */
-    @GetMapping("/session/{sessionId}")
+    /** GET /api/zones/session/{sessionId}/availability */
+    @GetMapping("/session/{sessionId}/availability")
     public ResponseEntity<List<ZoneAvailabilityDto>> getAvailabilityBySession(
             @PathVariable Integer sessionId) {
         var result = eventZoneService.getAvailabilityBySession(sessionId);
@@ -37,12 +37,6 @@ public class ZoneController {
             @RequestParam String groupName) {
         var result = eventZoneService.getZonesByGroup(sessionId, groupName);
         return ResponseEntity.ok(result);
-    }
-    
-    private final EventZoneService zoneService;
-    @GetMapping("/session/{sessionId}/availability")
-    public ResponseEntity<?> getAvailability(@PathVariable Integer sessionId) {
-        return ResponseEntity.ok(zoneService.getAvailabilityBySession(sessionId));
     }
 }
 

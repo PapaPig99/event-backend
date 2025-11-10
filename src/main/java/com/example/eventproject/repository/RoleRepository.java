@@ -9,6 +9,6 @@ import java.util.Optional;
 @Repository
 public interface RoleRepository extends JpaRepository<Role, Integer> {
 
-    /** ค้นหา role ด้วยรหัส code เ"ADMIN", "USER" */
+    /** ค้นหา role ด้วยรหัส code "ADMIN", "USER" , "GUEST" */
     Optional<Role> findByCode(String code);
 }

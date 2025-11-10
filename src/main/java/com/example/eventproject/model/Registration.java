@@ -35,8 +35,6 @@ public class Registration {
     @JoinColumn(name = "zone_id", nullable = false)
     private EventZone zone;
 
-    private Integer quantity;
-
     // ========== PRICE & PAYMENT ==========
 
     @Column(name = "price", nullable = false, precision = 10, scale = 2)
@@ -88,9 +86,6 @@ public class Registration {
 
     public EventZone getZone() { return zone; }
     public void setZone(EventZone zone) { this.zone = zone; }
-
-    public Integer getQuantity() { return quantity; }
-    public void setQuantity(Integer quantity) { this.quantity = quantity; }
 
     public BigDecimal getPrice() { return price; }
     public void setPrice(BigDecimal price) { this.price = price; }
