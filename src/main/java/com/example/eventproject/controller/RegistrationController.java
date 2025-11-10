@@ -18,7 +18,8 @@ public class RegistrationController {
     private final RegistrationService registrationService;
 
     /* ==========================================================
-       CREATE — รองรับโหมดเดิม (single) และใหม่ (bulk items[])
+       CREATE — รองรับ (single zone) และ (items[])
+       - รองรับ guest ที่ยังไม่สมัครสมาชิก
        ========================================================== */
     @PostMapping
     public ResponseEntity<?> create(
@@ -26,15 +27,16 @@ public class RegistrationController {
             @RequestBody Map<String, Object> body
     ) {
         try {
-            Integer eventId   = asInt(body.get("eventId"));
+            Integer eventId = asInt(body.get("eventId"));
             Integer sessionId = asInt(body.get("sessionId"));
+
             if (eventId == null || sessionId == null) {
                 return ResponseEntity.badRequest().body("eventId and sessionId are required");
             }
 
             List<Registration> regs = new ArrayList<>();
 
-            // โหมดใหม่: items[]
+            // items[] (หลาย zone หลาย quantity)
             Object itemsObj = body.get("items");
             if (itemsObj instanceof List<?> items && !items.isEmpty()) {
                 for (Object o : items) {
@@ -44,25 +46,31 @@ public class RegistrationController {
                     if (zoneId == null) zoneId = asInt(it.get("zoneId"));
                     Integer qty = asInt(it.get("quantity"));
 
-                    if (zoneId == null) return ResponseEntity.badRequest().body("seatZoneId/zoneId is required");
-                    if (qty == null || qty <= 0) return ResponseEntity.badRequest().body("Quantity must be > 0");
+                    if (zoneId == null)
+                        return ResponseEntity.badRequest().body("seatZoneId/zoneId is required");
+                    if (qty == null || qty <= 0)
+                        return ResponseEntity.badRequest().body("Quantity must be > 0");
 
+                    // รองรับ guest auto-create ผ่าน service
                     regs.addAll(registrationService.create(email, eventId, sessionId, zoneId, qty));
                 }
             } else {
-                // โหมดเดิม: zoneId + quantity
+                // โหมดเดิม: zoneId + quantity เดียว
                 Integer zoneId = asInt(body.get("seatZoneId"));
                 if (zoneId == null) zoneId = asInt(body.get("zoneId"));
-                Integer qty    = asInt(body.get("quantity"));
+                Integer qty = asInt(body.get("quantity"));
 
-                if (zoneId == null) return ResponseEntity.badRequest().body("seatZoneId/zoneId is required");
-                if (qty == null || qty <= 0) return ResponseEntity.badRequest().body("Quantity must be > 0");
+                if (zoneId == null)
+                    return ResponseEntity.badRequest().body("seatZoneId/zoneId is required");
+                if (qty == null || qty <= 0)
+                    return ResponseEntity.badRequest().body("Quantity must be > 0");
 
                 regs = registrationService.create(email, eventId, sessionId, zoneId, qty);
             }
 
             if (regs.isEmpty()) return ResponseEntity.badRequest().body("No registration created");
 
+            // สร้าง response ตามโครงสร้างใหม่ (ใช้ใบแรกเป็น sample)
             Registration sample = regs.get(0);
             RegistrationDto.CreateResponse response = new RegistrationDto.CreateResponse(
                     sample.getPaymentReference(),
@@ -78,6 +86,7 @@ public class RegistrationController {
             );
 
             return ResponseEntity.status(201).body(response);
+
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest().body(ex.getMessage());
         } catch (Exception ex) {
@@ -95,6 +104,7 @@ public class RegistrationController {
             if (updated == null || updated.isEmpty()) {
                 return ResponseEntity.badRequest().body("paymentReference not found");
             }
+
             Registration first = updated.get(0);
             RegistrationDto.ConfirmResponse res = new RegistrationDto.ConfirmResponse(
                     first.getPaymentReference(),
@@ -109,25 +119,46 @@ public class RegistrationController {
             return ResponseEntity.internalServerError().body(e.getMessage());
         }
     }
+    /* ==========================================================
+   CHECK-IN — สแกนตั๋วเข้า (by ticket code)
+   ========================================================== */
+    @PatchMapping("/checkin/{ticketCode}")
+    public ResponseEntity<?> checkInByTicketCode(@PathVariable String ticketCode) {
+        try {
+            Registration updated = registrationService.checkInByTicketCode(ticketCode);
+
+            // สร้าง DTO response สวย ๆ กลับไป
+            RegistrationDto.Response res = RegistrationDto.Response.from(updated);
+
+            return ResponseEntity.ok(res);
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage())); // เช่น check-in ซ้ำ
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
 
     /* ==========================================================
-       CANCEL — ชั่วคราวให้ผ่านคอมไพล์/เดโม (no-op)
+       CANCEL (stub/demo)
        ========================================================== */
     @PatchMapping("/{id}/cancel")
     public ResponseEntity<?> cancel(@PathVariable Integer id) {
-        // TODO: ถ้าต้องคืนที่นั่งจริง ให้ไปเพิ่มเมธอดใน RegistrationService แล้วเรียกใช้ที่นี่
         Map<String, Object> ok = new HashMap<>();
         ok.put("id", id);
-        ok.put("status", "CANCELLED"); // ฉลากเฉย ๆ ฝั่ง FE จะถือว่าทำงานสำเร็จ
+        ok.put("status", "CANCELLED");
         return ResponseEntity.ok(ok);
     }
 
     /* ==========================================================
-       ME — ดึงรายการจองของผู้ใช้ (ใช้ email param)
+       ME — ดึงรายการจองของผู้ใช้ (ใช้ email)
+       - แสดงทุกใบ รวม guest ที่จองก่อนสมัคร
        ========================================================== */
     @GetMapping("/me")
     public ResponseEntity<?> myRegs(
-            @RequestParam(required = true) String email,
+            @RequestParam String email,
             @RequestParam(required = false) String status
     ) {
         try {
@@ -138,9 +169,11 @@ public class RegistrationController {
                 Registration.PayStatus ps = Registration.PayStatus.valueOf(status.toUpperCase());
                 list = registrationService.getByUserAndStatus(email, ps);
             }
+
             List<RegistrationDto.Response> out = list.stream()
                     .map(RegistrationDto.Response::from)
                     .collect(Collectors.toList());
+
             return ResponseEntity.ok(out);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -150,7 +183,7 @@ public class RegistrationController {
     }
 
     /* ==========================================================
-       GET ONE — ใช้เปิด Ticket Modal (หาใน getAll())
+       GET ONE — ใช้เปิด Ticket Modal (ดูใบเดียว)
        ========================================================== */
     @GetMapping("/{id}")
     public ResponseEntity<?> getOne(@PathVariable Integer id) {
@@ -167,7 +200,7 @@ public class RegistrationController {
     }
 
     /* ==========================================================
-       READ (เดิม)
+       READ
        ========================================================== */
     @GetMapping
     public ResponseEntity<List<Registration>> getAll() {
@@ -198,7 +231,8 @@ public class RegistrationController {
     @GetMapping("/event/{eventId}/session/{sessionId}")
     public ResponseEntity<List<Registration>> getPaidByEventAndSession(
             @PathVariable Integer eventId,
-            @PathVariable Integer sessionId) {
+            @PathVariable Integer sessionId
+    ) {
         return ResponseEntity.ok(registrationService.getPaidByEventAndSession(eventId, sessionId));
     }
 

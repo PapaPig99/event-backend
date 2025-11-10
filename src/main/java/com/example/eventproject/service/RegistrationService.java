@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -19,10 +20,12 @@ public class RegistrationService {
     private final EventSessionRepository sessionRepository;
     private final EventZoneRepository zoneRepository;
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
 
     /* ==========================================================
-       CREATE MULTI-TICKET REGISTRATION (Single Zone)
-       ========================================================== */
+     CREATE MULTI-TICKET REGISTRATION (Single Zone)
+    - ผู้ใช้ที่สมัครแล้วจองเลย และผู้จองใหม่ให้สร้างในตารางไว้ก่อน (Guest)
+   ========================================================== */
     @Transactional
     public List<Registration> create(String email,
                                      Integer eventId,
@@ -30,12 +33,15 @@ public class RegistrationService {
                                      Integer zoneId,
                                      Integer quantity) {
 
-        if (quantity == null || quantity <= 0)
+        // 1 ตรวจสอบจำนวน ticket ที่ต้องการจอง
+        if (quantity == null || quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be > 0");
+        }
 
-        // 1️ ตรวจสอบ entity
-        var user = userRepository.findById(email)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        // 2 ตรวจสอบว่ามีผู้ใช้นี้อยู่ในระบบหรือยัง — ถ้าไม่มีก็สร้าง guest
+        User user = ensureUserExists(email);
+
+        // 3 ตรวจสอบ entity หลักที่ต้องมี
         var event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found"));
         var session = sessionRepository.findById(sessionId)
@@ -43,21 +49,21 @@ public class RegistrationService {
         var zone = zoneRepository.findById(zoneId)
                 .orElseThrow(() -> new IllegalArgumentException("Zone not found"));
 
-        // 2️ ตรวจสอบความจุโซน
+        // 4 ตรวจสอบความจุโซน (รวมทั้ง Paid + Unpaid)
         int totalBooked = registrationRepository.countAllBookedInZone(zoneId);
         if (totalBooked + quantity > zone.getCapacity()) {
             throw new IllegalStateException("Zone " + zone.getName() + " is fully booked");
         }
 
-        // 3️ สร้างรหัสชำระเงินกลาง (ใช้ร่วมกันทุกใบ)
-        String paymentRef = "PAY-" + LocalDateTime.now().toLocalDate() + "-" +
+        // 5 สร้างรหัสชำระเงินกลาง (ใช้ร่วมกันทุกใบ)
+        String paymentRef = "PAY-" + LocalDate.now() + "-" +
                 UUID.randomUUID().toString().substring(0, 6).toUpperCase();
 
         List<Registration> tickets = new ArrayList<>();
         BigDecimal pricePerTicket = zone.getPrice();
         BigDecimal total = pricePerTicket.multiply(BigDecimal.valueOf(quantity));
 
-        // 4️ วนสร้าง ticket ตามจำนวน
+        // 6 วนสร้าง Registration แยกใบตามจำนวนที่ผู้ใช้จอง
         for (int i = 1; i <= quantity; i++) {
             Registration reg = new Registration();
             reg.setEmail(email);
@@ -69,7 +75,6 @@ public class RegistrationService {
             reg.setTotalPrice(total);
             reg.setPaymentReference(paymentRef);
             reg.setPaymentStatus(Registration.PayStatus.UNPAID);
-            reg.setQuantity(1); // ใบละ 1
             reg.setTicketCode(generateTicketCode(event.getTitle(), i));
             reg.setCreatedAt(LocalDateTime.now());
             tickets.add(registrationRepository.save(reg));
@@ -77,6 +82,36 @@ public class RegistrationService {
 
         return tickets;
     }
+
+    /* ==========================================================
+       AUTO-CREATE USER IF NOT EXISTS (Guest)
+       ========================================================== */
+    private User ensureUserExists(String email) {
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Email is required");
+        }
+
+        // ถ้ามี user แล้ว → ใช้ต่อได้เลย
+        if (userRepository.existsByEmail(email)) {
+            return userRepository.findById(email)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        }
+
+        // ถ้าไม่มี → สร้าง guest user อัตโนมัติ
+        User guest = new User();
+        guest.setEmail(email);
+        guest.setName("Guest");
+        guest.setPassword(null);
+
+        // ดึง role GUEST (ถ้าไม่มีให้ fallback เป็น USER)
+        Role guestRole = roleRepository.findByCode("GUEST")
+                .or(() -> roleRepository.findByCode("USER"))
+                .orElseThrow(() -> new IllegalStateException("No default role found"));
+        guest.setRole(guestRole);
+
+        return userRepository.save(guest);
+    }
+
 
     /* ==========================================================
        CONFIRM PAYMENT — อัปเดตสถานะทั้งหมดในชุดเดียว

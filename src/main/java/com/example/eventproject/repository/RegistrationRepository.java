@@ -8,13 +8,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Repository สำหรับจัดการข้อมูลการจองตั๋ว (Registration)
- * ------------------------------------------------------------
- * ใช้เชื่อมกับฐานข้อมูลผ่าน Spring Data JPA
- * มีทั้ง query พื้นฐาน, query แบบ custom, และ aggregation
- * ครอบคลุมทั้งฝั่งผู้ใช้และผู้ดูแลระบบ
- */
 public interface RegistrationRepository extends JpaRepository<Registration, Integer> {
 
     /* ==========================================================
@@ -28,7 +21,7 @@ public interface RegistrationRepository extends JpaRepository<Registration, Inte
      * @param email อีเมลของผู้ใช้
      * @return รายการ Registration ทั้งหมด เรียงจากใหม่ → เก่า
      */
-    @EntityGraph(attributePaths = {"user", "event", "session", "zone"})
+    @EntityGraph(attributePaths = {"user", "user.role", "event", "session", "zone"})
     List<Registration> findByEmailOrderByCreatedAtDesc(String email);
 
     /**
@@ -39,7 +32,7 @@ public interface RegistrationRepository extends JpaRepository<Registration, Inte
      * @param paymentStatus สถานะการชำระเงิน (UNPAID / PAID)
      * @return รายการ Registration ที่ตรงกับสถานะ
      */
-    @EntityGraph(attributePaths = {"user", "event", "session", "zone"})
+    @EntityGraph(attributePaths = {"user", "user.role", "event", "session", "zone"})
     List<Registration> findByEmailAndPaymentStatusOrderByCreatedAtDesc(
             String email, Registration.PayStatus paymentStatus);
 
@@ -51,7 +44,7 @@ public interface RegistrationRepository extends JpaRepository<Registration, Inte
      * @param paymentStatus สถานะการชำระเงิน
      * @return รายการ Registration ของอีเวนต์นั้น
      */
-    @EntityGraph(attributePaths = {"user", "event", "session", "zone"})
+    @EntityGraph(attributePaths = {"user", "user.role", "event", "session", "zone"})
     List<Registration> findByEvent_IdAndPaymentStatusOrderByCreatedAtDesc(
             Integer eventId, Registration.PayStatus paymentStatus);
 
@@ -64,7 +57,7 @@ public interface RegistrationRepository extends JpaRepository<Registration, Inte
      * @param paymentStatus สถานะการชำระเงิน
      * @return รายการ Registration ของรอบนั้น
      */
-    @EntityGraph(attributePaths = {"user", "event", "session", "zone"})
+    @EntityGraph(attributePaths = {"user", "user.role", "event", "session", "zone"})
     List<Registration> findByEvent_IdAndSession_IdAndPaymentStatusOrderByCreatedAtDesc(
             Integer eventId, Integer sessionId, Registration.PayStatus paymentStatus);
 
@@ -75,7 +68,7 @@ public interface RegistrationRepository extends JpaRepository<Registration, Inte
      * @param ticketCode รหัสตั๋วที่ unique
      * @return Registration ของตั๋วนั้น (ถ้ามี)
      */
-    @EntityGraph(attributePaths = {"user", "event", "session", "zone"})
+    @EntityGraph(attributePaths = {"user", "user.role", "event", "session", "zone"})
     Optional<Registration> findByTicketCode(String ticketCode);
 
     /**

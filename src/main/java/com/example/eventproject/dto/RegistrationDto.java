@@ -7,17 +7,21 @@ import java.util.List;
 
 public class RegistrationDto {
 
-    /* ---------- CREATE ---------- */
-    // ใช้สำหรับ POST /api/registrations
-    // สร้างหลายใบใน zone เดียว (แต่จ่ายครั้งเดียว)
+    /* ==========================================================
+       CREATE REQUEST — ใช้สำหรับ POST /api/registrations
+       สร้างหลายใบใน zone เดียว (แต่จ่ายครั้งเดียว)
+       ========================================================== */
     public record CreateRequest(
             Integer eventId,
             Integer sessionId,
             Integer zoneId,
-            Integer quantity
+            Integer quantity // จำนวนที่ผู้ใช้ต้องการจอง
     ) {}
 
-    /* ---------- CREATE RESPONSE (หลายใบ) ---------- */
+    /* ==========================================================
+       CREATE RESPONSE — หลังจากจองสำเร็จ
+       แสดงผลรวมทั้งหมดใน order เดียว
+       ========================================================== */
     public record CreateResponse(
             String paymentReference,
             Integer eventId,
@@ -31,7 +35,9 @@ public class RegistrationDto {
             List<String> ticketCodes
     ) {}
 
-    /* ---------- INDIVIDUAL TICKET RESPONSE ---------- */
+    /* ==========================================================
+       INDIVIDUAL TICKET RESPONSE — ใช้แสดงแต่ละใบ
+       ========================================================== */
     public record Response(
             Integer id,
             String email,
@@ -39,7 +45,6 @@ public class RegistrationDto {
             Integer sessionId,
             Integer zoneId,
             String zoneName,
-            Integer  quantity,
             String paymentReference,
             String paymentStatus,
             BigDecimal price,
@@ -58,7 +63,6 @@ public class RegistrationDto {
                     reg.getSession() != null ? reg.getSession().getId() : null,
                     reg.getZone() != null ? reg.getZone().getId() : null,
                     reg.getZone() != null ? reg.getZone().getName() : null,
-                    reg.getQuantity(),
                     reg.getPaymentReference(),
                     reg.getPaymentStatus() != null ? reg.getPaymentStatus().name() : null,
                     reg.getPrice(),
@@ -72,8 +76,9 @@ public class RegistrationDto {
         }
     }
 
-    /* ---------- CONFIRM PAYMENT ---------- */
-    // ใช้สำหรับ PATCH /api/registrations/confirm
+    /* ==========================================================
+       CONFIRM PAYMENT — ใช้สำหรับ PATCH /api/registrations/confirm
+       ========================================================== */
     public record ConfirmRequest(
             String paymentReference
     ) {}

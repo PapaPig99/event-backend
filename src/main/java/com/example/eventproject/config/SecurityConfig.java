@@ -43,8 +43,7 @@ public class SecurityConfig {
                         .requestMatchers("/images/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/zones/session/*/availability").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/zones/session/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/zones/session/**").permitAll()
                         .requestMatchers(HttpMethod.GET,"/api/dashboard/summary").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET,"/api/registrations/event/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/events/**").hasRole("ADMIN")
@@ -54,8 +53,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/zones/**").hasRole("ADMIN")
                         .requestMatchers("/api/templates/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/registrations/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/registrations/**").hasRole("USER")
+                        .requestMatchers(HttpMethod.GET, "/api/registrations/user/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/registrations/**").hasAnyRole("USER","ADMIN")
                         .requestMatchers("/error").permitAll()
+                        .requestMatchers(HttpMethod.PATCH, "/api/registrations/confirm").permitAll()
+                        .requestMatchers(HttpMethod.PATCH, "/api/registrations/checkin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 );
 
