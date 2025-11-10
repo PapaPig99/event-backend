@@ -119,6 +119,27 @@ public class RegistrationController {
             return ResponseEntity.internalServerError().body(e.getMessage());
         }
     }
+    /* ==========================================================
+   CHECK-IN — สแกนตั๋วเข้า (by ticket code)
+   ========================================================== */
+    @PatchMapping("/checkin/{ticketCode}")
+    public ResponseEntity<?> checkInByTicketCode(@PathVariable String ticketCode) {
+        try {
+            Registration updated = registrationService.checkInByTicketCode(ticketCode);
+
+            // สร้าง DTO response สวย ๆ กลับไป
+            RegistrationDto.Response res = RegistrationDto.Response.from(updated);
+
+            return ResponseEntity.ok(res);
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage())); // เช่น check-in ซ้ำ
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
 
     /* ==========================================================
        CANCEL (stub/demo)

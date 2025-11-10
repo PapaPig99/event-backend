@@ -57,6 +57,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/registrations/**").hasAnyRole("USER","ADMIN")
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.PATCH, "/api/registrations/confirm").permitAll()
+                        .requestMatchers(HttpMethod.PATCH, "/api/registrations/checkin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 );
 
