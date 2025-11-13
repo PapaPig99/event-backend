@@ -44,15 +44,21 @@ public class RegistrationService {
                                      Integer zoneId,
                                      Integer quantity) {
 
-        // 1 ตรวจสอบจำนวน ticket ที่ต้องการจอง
+        // 1. ตรวจสอบจำนวน ticket ที่ต้องการจอง
         if (quantity == null || quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be > 0");
         }
 
-        // 2 ตรวจสอบว่ามีผู้ใช้นี้อยู่ในระบบหรือยัง — ถ้าไม่มีก็สร้าง guest
-        User user = ensureUserExists(email);
+        // 2. normalize email
+        String normalizedEmail = (email == null ? "" : email).trim().toLowerCase();
+        if (normalizedEmail.isEmpty()) {
+            throw new IllegalArgumentException("Email is required");
+        }
 
-        // 3 ตรวจสอบ entity หลักที่ต้องมี
+        // 3. ตรวจสอบว่ามีผู้ใช้นี้อยู่ในระบบหรือยัง — ถ้าไม่มีก็สร้าง guest
+        User user = ensureUserExists(normalizedEmail);
+
+        // 4. ตรวจสอบ entity หลักที่ต้องมี
         var event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found"));
         var session = sessionRepository.findById(sessionId)
@@ -60,13 +66,13 @@ public class RegistrationService {
         var zone = zoneRepository.findById(zoneId)
                 .orElseThrow(() -> new IllegalArgumentException("Zone not found"));
 
-        // 4 ตรวจสอบความจุโซน (รวมทั้ง Paid + Unpaid)
+        // 5. ตรวจสอบความจุโซน (รวมทั้ง Paid + Unpaid)
         int totalBooked = registrationRepository.countAllBookedInZone(zoneId);
         if (totalBooked + quantity > zone.getCapacity()) {
             throw new IllegalStateException("Zone " + zone.getName() + " is fully booked");
         }
 
-        // 5 สร้างรหัสชำระเงินกลาง (ใช้ร่วมกันทุกใบ)
+        // 6. สร้างรหัสชำระเงินกลาง (ใช้ร่วมกันทุกใบ)
         String paymentRef = "PAY-" + LocalDate.now() + "-" +
                 UUID.randomUUID().toString().substring(0, 6).toUpperCase();
 
@@ -74,11 +80,11 @@ public class RegistrationService {
         BigDecimal pricePerTicket = zone.getPrice();
         BigDecimal total = pricePerTicket.multiply(BigDecimal.valueOf(quantity));
 
-        // 6 วนสร้าง Registration แยกใบตามจำนวนที่ผู้ใช้จอง
+        // 7. วนสร้าง Registration แยกใบตามจำนวนที่ผู้ใช้จอง
         for (int i = 1; i <= quantity; i++) {
             Registration reg = new Registration();
-            reg.setEmail(email);
-            reg.setUser(user);
+            reg.setEmail(normalizedEmail);       // ใช้ email ที่ normalize แล้ว
+            reg.setUser(user);                   // ผูกกับ user ที่เป็น guest หรือ user จริง
             reg.setEvent(event);
             reg.setSession(session);
             reg.setZone(zone);
@@ -97,32 +103,29 @@ public class RegistrationService {
     /* ==========================================================
        AUTO-CREATE USER IF NOT EXISTS (Guest)
        ========================================================== */
-    private User ensureUserExists(String email) {
-        if (email == null || email.isBlank()) {
+    private User ensureUserExists(String normalizedEmail) {
+        if (normalizedEmail == null || normalizedEmail.isBlank()) {
             throw new IllegalArgumentException("Email is required");
         }
 
         // ถ้ามี user แล้ว → ใช้ต่อได้เลย
-        if (userRepository.existsByEmail(email)) {
-            return userRepository.findById(email)
-                    .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        }
+        return userRepository.findByEmail(normalizedEmail)
+                .orElseGet(() -> {
+                    // ถ้าไม่มี → สร้าง guest user อัตโนมัติ
+                    User guest = new User();
+                    guest.setEmail(normalizedEmail);
+                    guest.setName("Guest");
+                    guest.setPassword(null); // ไม่มี password = guest ยังล็อกอินไม่ได้
 
-        // ถ้าไม่มี → สร้าง guest user อัตโนมัติ
-        User guest = new User();
-        guest.setEmail(email);
-        guest.setName("Guest");
-        guest.setPassword(null);
+                    // ดึง role GUEST (ถ้าไม่มีให้ fallback เป็น USER)
+                    Role guestRole = roleRepository.findByCode("GUEST")
+                            .or(() -> roleRepository.findByCode("USER"))
+                            .orElseThrow(() -> new IllegalStateException("No default role found"));
+                    guest.setRole(guestRole);
 
-        // ดึง role GUEST (ถ้าไม่มีให้ fallback เป็น USER)
-        Role guestRole = roleRepository.findByCode("GUEST")
-                .or(() -> roleRepository.findByCode("USER"))
-                .orElseThrow(() -> new IllegalStateException("No default role found"));
-        guest.setRole(guestRole);
-
-        return userRepository.save(guest);
+                    return userRepository.save(guest);
+                });
     }
-
 
     /* ==========================================================
        CONFIRM PAYMENT — อัปเดตสถานะทั้งหมดในชุดเดียว
@@ -184,7 +187,6 @@ public class RegistrationService {
         return registrationRepository.findByEmailAndPaymentStatusOrderByCreatedAtDesc(email, status);
     }
 
-
     @Transactional(readOnly = true)
     public List<Registration> getPaidByEventAndSession(Integer eventId, Integer sessionId) {
         return registrationRepository.findByEvent_IdAndSession_IdAndPaymentStatusOrderByCreatedAtDesc(
@@ -210,12 +212,13 @@ public class RegistrationService {
         return code;
     }
 
-
+    /* ==========================================================
+       READ BY PAYMENT REFERENCE
+       ========================================================== */
     public List<Registration> getByPaymentReference(String paymentReference) {
-    if (paymentReference == null || paymentReference.isBlank()) {
-        throw new IllegalArgumentException("paymentReference is required");
+        if (paymentReference == null || paymentReference.isBlank()) {
+            throw new IllegalArgumentException("paymentReference is required");
+        }
+        return registrationRepository.findByPaymentReference(paymentReference);
     }
-    return registrationRepository.findByPaymentReference(paymentReference);
-}
-
 }

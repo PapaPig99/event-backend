@@ -1,7 +1,6 @@
 package com.example.eventproject.service;
 
 import java.util.Optional;
-import java.util.Set;
 
 import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -34,32 +33,70 @@ public class AuthService {
     }
 
     /* ==========================================================
-       REGISTER — สมัครสมาชิกใหม่
+       REGISTER — สมัครสมาชิกใหม่ / อัปเกรด guest
        ========================================================== */
     public AuthResponse register(RegisterRequest req) {
         String email = (req.email() == null ? "" : req.email()).trim().toLowerCase();
         if (email.isEmpty()) {
             throw new IllegalArgumentException("Email is required");
         }
-        if (users.existsByEmail(email)) {
-            throw new IllegalArgumentException("Email already in use");
+
+        String rawPassword = req.password();
+        if (rawPassword == null || rawPassword.isBlank()) {
+            throw new IllegalArgumentException("Password is required");
         }
+        String name = req.name();
 
         // หา role USER จากตาราง roles
         Role userRole = roles.findByCode("USER").orElse(null);
 
-        // สร้าง user ใหม่
+        // ===== ถ้ามี user อยู่แล้ว ให้เช็คว่าเป็น guest รึเปล่า =====
+        Optional<User> existingOpt = users.findByEmail(email);
+
+        if (existingOpt.isPresent()) {
+            User existing = existingOpt.get();
+
+            String stored = existing.getPassword();
+            boolean hasRealPassword = (stored != null && !stored.isBlank());
+
+            // ถ้ามี password อยู่แล้ว แสดงว่าเป็น account ที่สมัครแล้ว → ห้ามสมัครซ้ำ
+            if (hasRealPassword) {
+                throw new IllegalArgumentException("Email already in use");
+            }
+
+            // กรณีนี้คือ guest user (เคยจองตั๋วด้วย email นี้มาก่อน) → อัปเกรดเป็นสมาชิกเต็มตัว
+            existing.setPassword(encoder.encode(rawPassword));
+            existing.setName(name);
+
+            if (existing.getRole() == null && userRole != null) {
+                existing.setRole(userRole);
+            }
+
+            users.save(existing);
+
+            String roleCode = (existing.getRole() != null && existing.getRole().getCode() != null)
+                    ? existing.getRole().getCode()
+                    : "USER";
+
+            String token = jwt.create(existing.getEmail(), roleCode);
+            return new AuthResponse(token, existing.getEmail(), existing.getName(), roleCode);
+        }
+
+        // ===== กรณีไม่เคยมี user มาก่อน → สมัครใหม่ปกติ =====
         User u = new User();
         u.setEmail(email);
-        u.setPassword(encoder.encode(req.password()));
-        u.setName(req.name());
+        u.setPassword(encoder.encode(rawPassword));
+        u.setName(name);
         if (userRole != null) {
             u.setRole(userRole);
         }
 
         users.save(u);
 
-        String roleCode = userRole != null ? userRole.getCode() : "USER";
+        String roleCode = (userRole != null && userRole.getCode() != null)
+                ? userRole.getCode()
+                : "USER";
+
         String token = jwt.create(u.getEmail(), roleCode);
 
         return new AuthResponse(token, u.getEmail(), u.getName(), roleCode);
@@ -97,7 +134,6 @@ public class AuthService {
             throw new ResponseStatusException(UNAUTHORIZED, "INVALID_CREDENTIALS");
         }
 
-        // เลือก role แรก ถ้าไม่มีให้เป็น USER
         // ===== เลือก role จาก user ถ้าไม่มีให้เป็น USER =====
         String roleCode = "USER";
         if (u.getRole() != null && u.getRole().getCode() != null) {
@@ -106,6 +142,5 @@ public class AuthService {
 
         String token = jwt.create(u.getEmail(), roleCode);
         return new AuthResponse(token, u.getEmail(), u.getName(), roleCode);
-
     }
 }
