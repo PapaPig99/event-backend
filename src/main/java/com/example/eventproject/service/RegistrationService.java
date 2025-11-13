@@ -1,15 +1,26 @@
 package com.example.eventproject.service;
 
-import com.example.eventproject.model.*;
-import com.example.eventproject.repository.*;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.example.eventproject.model.Registration;
+import com.example.eventproject.model.Role;
+import com.example.eventproject.model.User;
+import com.example.eventproject.repository.EventRepository;
+import com.example.eventproject.repository.EventSessionRepository;
+import com.example.eventproject.repository.EventZoneRepository;
+import com.example.eventproject.repository.RegistrationRepository;
+import com.example.eventproject.repository.RoleRepository;
+import com.example.eventproject.repository.UserRepository;
+
+import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
@@ -198,4 +209,13 @@ public class RegistrationService {
         } while (registrationRepository.findByTicketCode(code).isPresent());
         return code;
     }
+
+
+    public List<Registration> getByPaymentReference(String paymentReference) {
+    if (paymentReference == null || paymentReference.isBlank()) {
+        throw new IllegalArgumentException("paymentReference is required");
+    }
+    return registrationRepository.findByPaymentReference(paymentReference);
+}
+
 }

@@ -1,14 +1,28 @@
 package com.example.eventproject.controller;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.example.eventproject.dto.RegistrationDto;
 import com.example.eventproject.model.Registration;
 import com.example.eventproject.service.RegistrationService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/registrations")
@@ -241,6 +255,35 @@ public class RegistrationController {
         int deleted = registrationService.deleteAllByEventCascade(eventId);
         return ResponseEntity.ok("Deleted " + deleted + " registrations for event " + eventId);
     }
+
+    
+    /* ==========================================================
+   VIEW TICKETS BY PAYMENT REFERENCE
+   - ใช้สำหรับแสดงตั๋วทุกใบใน 1 รอบการจ่าย
+   - read-only ไม่แก้สถานะอะไรทั้งนั้น
+   ========================================================== */
+@GetMapping("/by-ref/{paymentReference}")
+public ResponseEntity<?> getByPaymentReference(@PathVariable String paymentReference) {
+    try {
+        List<Registration> regs = registrationService.getByPaymentReference(paymentReference);
+
+        if (regs == null || regs.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // ใช้ DTO เดิมที่เอาไว้แสดงรายละเอียดตั๋ว
+        List<RegistrationDto.Response> out = regs.stream()
+                .map(RegistrationDto.Response::from)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(out);
+    } catch (IllegalArgumentException e) {
+        return ResponseEntity.badRequest().body(e.getMessage());
+    } catch (Exception e) {
+        return ResponseEntity.internalServerError().body(e.getMessage());
+    }
+}
+
 
     /* --------------------- helpers --------------------- */
     private static Integer asInt(Object o) {
