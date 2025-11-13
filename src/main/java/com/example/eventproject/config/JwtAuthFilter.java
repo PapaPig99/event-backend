@@ -38,7 +38,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         // ===== BYPASS เส้นทางที่ไม่ต้องตรวจ JWT =====
         if ("OPTIONS".equalsIgnoreCase(method)
-                || path.startsWith("/api/auth/")
+                // อนุญาต register / login ไม่ต้องมี token
+                || path.equals("/api/auth/register")
+                || path.equals("/api/auth/login")
                 || path.startsWith("/v3/api-docs")
                 || path.startsWith("/swagger-ui")
                 || path.startsWith("/swagger-resources")

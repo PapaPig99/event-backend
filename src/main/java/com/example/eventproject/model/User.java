@@ -10,7 +10,7 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;  // primary key
 
-    @Column(nullable = false)
+    @Column
     private String password;
 
     @Column
@@ -32,4 +32,6 @@ public class User {
 
     public Role getRole() { return role; }
     public void setRole(Role role) { this.role = role; }
+
+    
 }

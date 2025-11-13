@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.eventproject.dto.RegistrationDto;
 import com.example.eventproject.model.Registration;
 import com.example.eventproject.service.RegistrationService;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import lombok.RequiredArgsConstructor;
 
@@ -171,30 +172,45 @@ public class RegistrationController {
        - แสดงทุกใบ รวม guest ที่จองก่อนสมัคร
        ========================================================== */
     @GetMapping("/me")
-    public ResponseEntity<?> myRegs(
-            @RequestParam String email,
-            @RequestParam(required = false) String status
-    ) {
-        try {
-            List<Registration> list;
-            if (status == null || status.isBlank()) {
-                list = registrationService.getAllByUser(email);
-            } else {
-                Registration.PayStatus ps = Registration.PayStatus.valueOf(status.toUpperCase());
-                list = registrationService.getByUserAndStatus(email, ps);
-            }
+public ResponseEntity<?> myRegs(
+        @RequestParam(required = false) String email,
+        @AuthenticationPrincipal(expression = "email") String jwtEmail,
+        @RequestParam(required = false) String status
+) {
+    try {
+        // 1) FE ส่ง email → ใช้ email นั้นก่อน
+        String finalEmail = null;
+        if (email != null && !email.isBlank()) {
+            finalEmail = email.trim().toLowerCase();
+        } 
+        // 2) fallback ใช้ email จาก JWT
+        else if (jwtEmail != null && !jwtEmail.isBlank()) {
+            finalEmail = jwtEmail.trim().toLowerCase();
+        } 
 
-            List<RegistrationDto.Response> out = list.stream()
-                    .map(RegistrationDto.Response::from)
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(out);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(e.getMessage());
+        if (finalEmail == null) {
+            return ResponseEntity.badRequest().body("Email missing");
         }
+
+        List<Registration> list;
+        if (status == null || status.isBlank()) {
+            list = registrationService.getAllByUser(finalEmail);
+        } else {
+            Registration.PayStatus ps = Registration.PayStatus.valueOf(status.toUpperCase());
+            list = registrationService.getByUserAndStatus(finalEmail, ps);
+        }
+
+        List<RegistrationDto.Response> out = list.stream()
+                .map(RegistrationDto.Response::from)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(out);
+
+    } catch (Exception e) {
+        return ResponseEntity.internalServerError().body(e.getMessage());
     }
+}
+
 
     /* ==========================================================
        GET ONE — ใช้เปิด Ticket Modal (ดูใบเดียว)
@@ -294,4 +310,8 @@ public ResponseEntity<?> getByPaymentReference(@PathVariable String paymentRefer
         }
         return null;
     }
+
+
+
+    
 }

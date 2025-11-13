@@ -21,6 +21,7 @@ public class JwtUtil {
         Date exp = new Date(now.getTime() + EXP_MS);
         return Jwts.builder()
                 .setSubject(subjectEmail)
+                .claim("email", subjectEmail)
                 .claim("role", role)
                 .setIssuedAt(now)
                 .setExpiration(exp)
