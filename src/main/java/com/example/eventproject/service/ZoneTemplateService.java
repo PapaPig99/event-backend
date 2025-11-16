@@ -1,5 +1,6 @@
 package com.example.eventproject.service;
 
+import com.example.eventproject.dto.ZoneTemplateDto;
 import com.example.eventproject.model.EventSession;
 import com.example.eventproject.model.EventZone;
 import com.example.eventproject.model.ZoneTemplate;
@@ -13,8 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * Service สำหรับจัดการ Zone Template
- * ใช้ตอน admin ต้องการ clone zone template ไปยัง session ใหม่
+ * Service สำหรับจัดการ Zone Template (CRUD)
  */
 @Service
 @RequiredArgsConstructor
@@ -25,18 +25,81 @@ public class ZoneTemplateService {
     private final EventSessionRepository sessionRepository;
 
     /* ==========================================================
-       READ : ดึงชื่อ template ทั้งหมด (เช่น สำหรับ dropdown)
+       READ : template ทั้งหมด
        ========================================================== */
     @Transactional(readOnly = true)
-    public List<String> getAllTemplateNames() {
+    public List<ZoneTemplateDto> getAllTemplates() {
         return templateRepository.findAll()
                 .stream()
-                .map(ZoneTemplate::getName)
+                .map(t -> new ZoneTemplateDto(
+                        t.getId(),
+                        t.getName(),
+                        t.getGroupName(),
+                        t.getCapacity(),
+                        t.getPrice()
+                ))
                 .toList();
     }
 
     /* ==========================================================
-       CREATE : Clone zone template ทั้งหมดลงใน session ที่เลือก
+       CREATE : เพิ่ม template ใหม่
+       ========================================================== */
+    @Transactional
+    public ZoneTemplateDto createTemplate(ZoneTemplateDto dto) {
+        ZoneTemplate tpl = new ZoneTemplate();
+        tpl.setName(dto.name());
+        tpl.setGroupName(dto.groupName());
+        tpl.setCapacity(dto.capacity());
+        tpl.setPrice(dto.price());
+
+        ZoneTemplate saved = templateRepository.save(tpl);
+
+        return new ZoneTemplateDto(
+                saved.getId(),
+                saved.getName(),
+                saved.getGroupName(),
+                saved.getCapacity(),
+                saved.getPrice()
+        );
+    }
+
+    /* ==========================================================
+       UPDATE : แก้ไข template
+       ========================================================== */
+    @Transactional
+    public ZoneTemplateDto updateTemplate(Integer id, ZoneTemplateDto dto) {
+        ZoneTemplate tpl = templateRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Template not found: " + id));
+
+        tpl.setName(dto.name());
+        tpl.setGroupName(dto.groupName());
+        tpl.setCapacity(dto.capacity());
+        tpl.setPrice(dto.price());
+
+        ZoneTemplate saved = templateRepository.save(tpl);
+
+        return new ZoneTemplateDto(
+                saved.getId(),
+                saved.getName(),
+                saved.getGroupName(),
+                saved.getCapacity(),
+                saved.getPrice()
+        );
+    }
+
+    /* ==========================================================
+       DELETE : ลบ template
+       ========================================================== */
+    @Transactional
+    public void deleteTemplate(Integer id) {
+        if (!templateRepository.existsById(id)) {
+            throw new IllegalArgumentException("Template not found: " + id);
+        }
+        templateRepository.deleteById(id);
+    }
+
+    /* ==========================================================
+       CLONE : คัดลอกจาก template ทั้งหมด → session
        ========================================================== */
     @Transactional
     public void cloneZonesToSession(Integer sessionId) {
@@ -44,10 +107,10 @@ public class ZoneTemplateService {
         EventSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
 
-        // 2. ดึง zone templates ทั้งหมดจาก master table
+        // 2. ดึง template ทั้งหมด
         var templates = templateRepository.findAll();
 
-        // 3. สร้าง EventZone ใหม่ตาม template ทีละอัน
+        // 3. สร้าง EventZone แยกตาม template
         for (ZoneTemplate tpl : templates) {
             EventZone zone = new EventZone();
             zone.setSession(session);

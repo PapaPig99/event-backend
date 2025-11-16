@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.example.eventproject.dto.RegistrationDto;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -148,51 +149,89 @@ public class RegistrationService {
        CHECK-IN — จาก ticket code
        ========================================================== */
     @Transactional
-    public Registration checkInByTicketCode(String ticketCode) {
-        var reg = registrationRepository.findByTicketCode(ticketCode)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid ticket code: " + ticketCode));
+    public Registration checkInByEventSessionAndCode(Integer eventId, Integer sessionId, String ticketCode) {
 
-        if (Boolean.TRUE.equals(reg.getIsCheckedIn()))
-            throw new IllegalStateException("Ticket already checked in");
+        // 1. หา registration ตาม ticket code
+        Registration reg = registrationRepository.findByTicketCode(ticketCode)
+                .orElseThrow(() -> new IllegalArgumentException("Ticket not found"));
 
-        if (reg.getPaymentStatus() != Registration.PayStatus.PAID)
-            throw new IllegalStateException("Ticket not paid yet");
+        // 2. ตรวจ event ถูกต้องมั้ย
+        if (!reg.getEvent().getId().equals(eventId)) {
+            throw new IllegalArgumentException("Ticket does not belong to this event");
+        }
 
+        // 3. ตรวจ session ถูกต้องมั้ย
+        if (!reg.getSession().getId().equals(sessionId)) {
+            throw new IllegalArgumentException("Ticket does not belong to this session");
+        }
+
+        // 4. ถ้ายังไม่ได้จ่ายเงิน → ห้ามเช็กอิน
+        if (reg.getPaymentStatus() != Registration.PayStatus.PAID) {
+            throw new IllegalStateException("This ticket has not been paid yet");
+        }
+
+        // 5. เคยเช็กอินแล้ว?
+        if (Boolean.TRUE.equals(reg.getIsCheckedIn())) {
+            throw new IllegalStateException("Ticket already checked-in");
+        }
+
+        // 6. ✔ ทำการเช็กอิน
         reg.setIsCheckedIn(true);
         reg.setCheckedInAt(LocalDateTime.now());
+
         return registrationRepository.save(reg);
     }
+
 
     /* ==========================================================
        READ / DELETE
        ========================================================== */
+
+    // ดึงรายการทั้งหมด
     @Transactional(readOnly = true)
     public List<Registration> getAll() {
-        return registrationRepository.findAll();
+        return registrationRepository.findAllWithAllRelations();
     }
 
+    // ดึงตาม Event
     @Transactional(readOnly = true)
-    public List<Registration> getPaidByEvent(Integer eventId) {
-        return registrationRepository.findByEvent_IdAndPaymentStatusOrderByCreatedAtDesc(
-                eventId, Registration.PayStatus.PAID);
+    public List<RegistrationDto.Response> getPaidByEvent(Integer eventId) {
+        return registrationRepository
+                .findByEvent_IdOrderByCreatedAtDesc(eventId)
+                .stream()
+                .map(RegistrationDto.Response::from)
+                .toList();
     }
 
+
+    // ดึงรายการจองทั้งหมดของ user (My Tickets)
     @Transactional(readOnly = true)
-    public List<Registration> getAllByUser(String email) {
-        return registrationRepository.findByEmailOrderByCreatedAtDesc(email);
+    public List<RegistrationDto.Response> getAllByUser(String email) {
+        return registrationRepository.findByEmailOrderByCreatedAtDesc(email)
+                .stream().map(RegistrationDto.Response::from).toList();
     }
 
+
+    // ดึงรายการจองของ user ตาม status (UNPAID / PAID)
     @Transactional(readOnly = true)
-    public List<Registration> getByUserAndStatus(String email, Registration.PayStatus status) {
-        return registrationRepository.findByEmailAndPaymentStatusOrderByCreatedAtDesc(email, status);
+    public List<RegistrationDto.Response> getByUserAndStatus(String email, Registration.PayStatus status) {
+        return registrationRepository.findByEmailAndPaymentStatusOrderByCreatedAtDesc(email, status)
+                .stream().map(RegistrationDto.Response::from).toList();
     }
 
+    // ดึงตาม Event + Session
     @Transactional(readOnly = true)
-    public List<Registration> getPaidByEventAndSession(Integer eventId, Integer sessionId) {
-        return registrationRepository.findByEvent_IdAndSession_IdAndPaymentStatusOrderByCreatedAtDesc(
-                eventId, sessionId, Registration.PayStatus.PAID);
+    public List<RegistrationDto.Response> getPaidByEventAndSession(Integer eventId, Integer sessionId) {
+        return registrationRepository
+                .findByEvent_IdAndSession_IdOrderByCreatedAtDesc(
+                        eventId, sessionId)
+                .stream()
+                .map(RegistrationDto.Response::from)
+                .toList();
     }
 
+
+    // ลบregis ทั้งหมดของ Event หนึ่ง
     @Transactional
     public int deleteAllByEventCascade(Integer eventId) {
         return registrationRepository.deleteAllByEventCascade(eventId);

@@ -105,7 +105,6 @@ public class Registration {
     public String getTicketCode() { return ticketCode; }
     public void setTicketCode(String ticketCode) { this.ticketCode = ticketCode; }
 
-
     public Boolean getIsCheckedIn() { return isCheckedIn; }
     public void setIsCheckedIn(Boolean isCheckedIn) { this.isCheckedIn = isCheckedIn; }
 

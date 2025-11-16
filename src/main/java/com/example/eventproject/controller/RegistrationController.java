@@ -134,27 +134,27 @@ public class RegistrationController {
             return ResponseEntity.internalServerError().body(e.getMessage());
         }
     }
-    /* ==========================================================
-   CHECK-IN — สแกนตั๋วเข้า (by ticket code)
-   ========================================================== */
-    @PatchMapping("/checkin/{ticketCode}")
-    public ResponseEntity<?> checkInByTicketCode(@PathVariable String ticketCode) {
+    /* ==========================================================================
+   CHECK-IN — เช็คอินตาม Event + Session + TicketCode
+   ========================================================================== */
+    @PatchMapping("/events/{eventId}/sessions/{sessionId}/checkin/{ticketCode}")
+    public ResponseEntity<?> checkInByTicketCode(
+            @PathVariable Integer eventId,
+            @PathVariable Integer sessionId,
+            @PathVariable String ticketCode
+    ) {
         try {
-            Registration updated = registrationService.checkInByTicketCode(ticketCode);
-
-            // สร้าง DTO response สวย ๆ กลับไป
-            RegistrationDto.Response res = RegistrationDto.Response.from(updated);
-
-            return ResponseEntity.ok(res);
-
+            Registration updated = registrationService.checkInByEventSessionAndCode(eventId, sessionId, ticketCode);
+            return ResponseEntity.ok(RegistrationDto.Response.from(updated));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (IllegalStateException e) {
-            return ResponseEntity.status(409).body(Map.of("error", e.getMessage())); // เช่น check-in ซ้ำ
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage())); // already checked-in
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
     }
+
 
     /* ==========================================================
        CANCEL (stub/demo)
@@ -172,44 +172,39 @@ public class RegistrationController {
        - แสดงทุกใบ รวม guest ที่จองก่อนสมัคร
        ========================================================== */
     @GetMapping("/me")
-public ResponseEntity<?> myRegs(
-        @RequestParam(required = false) String email,
-        @AuthenticationPrincipal(expression = "email") String jwtEmail,
-        @RequestParam(required = false) String status
-) {
-    try {
-        // 1) FE ส่ง email → ใช้ email นั้นก่อน
-        String finalEmail = null;
-        if (email != null && !email.isBlank()) {
-            finalEmail = email.trim().toLowerCase();
-        } 
-        // 2) fallback ใช้ email จาก JWT
-        else if (jwtEmail != null && !jwtEmail.isBlank()) {
-            finalEmail = jwtEmail.trim().toLowerCase();
-        } 
+    public ResponseEntity<?> myRegs(
+            @RequestParam(required = false) String email,
+            @AuthenticationPrincipal(expression = "email") String jwtEmail,
+            @RequestParam(required = false) String status
+    ) {
+        try {
+            String finalEmail = null;
+            if (email != null && !email.isBlank()) {
+                finalEmail = email.trim().toLowerCase();
+            } else if (jwtEmail != null && !jwtEmail.isBlank()) {
+                finalEmail = jwtEmail.trim().toLowerCase();
+            }
 
-        if (finalEmail == null) {
-            return ResponseEntity.badRequest().body("Email missing");
+            if (finalEmail == null) {
+                return ResponseEntity.badRequest().body("Email missing");
+            }
+
+            List<RegistrationDto.Response> list;
+
+            if (status == null || status.isBlank()) {
+                list = registrationService.getAllByUser(finalEmail);
+            } else {
+                Registration.PayStatus ps = Registration.PayStatus.valueOf(status.toUpperCase());
+                list = registrationService.getByUserAndStatus(finalEmail, ps);
+            }
+
+            return ResponseEntity.ok(list);
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(e.getMessage());
         }
-
-        List<Registration> list;
-        if (status == null || status.isBlank()) {
-            list = registrationService.getAllByUser(finalEmail);
-        } else {
-            Registration.PayStatus ps = Registration.PayStatus.valueOf(status.toUpperCase());
-            list = registrationService.getByUserAndStatus(finalEmail, ps);
-        }
-
-        List<RegistrationDto.Response> out = list.stream()
-                .map(RegistrationDto.Response::from)
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(out);
-
-    } catch (Exception e) {
-        return ResponseEntity.internalServerError().body(e.getMessage());
     }
-}
+
 
 
     /* ==========================================================
@@ -233,12 +228,16 @@ public ResponseEntity<?> myRegs(
        READ
        ========================================================== */
     @GetMapping
-    public ResponseEntity<List<Registration>> getAll() {
-        return ResponseEntity.ok(registrationService.getAll());
+    public ResponseEntity<?> getAll() {
+        List<Registration> list = registrationService.getAll();
+        return ResponseEntity.ok(
+                list.stream().map(RegistrationDto.Response::from).toList()
+        );
     }
 
+
     @GetMapping("/user/{email}")
-    public ResponseEntity<List<Registration>> getUserRegistrations(
+    public ResponseEntity<List<RegistrationDto.Response>> getUserRegistrations(
             @PathVariable String email,
             @RequestParam(required = false) String status
     ) {
@@ -253,13 +252,14 @@ public ResponseEntity<?> myRegs(
         }
     }
 
+
     @GetMapping("/event/{eventId}")
-    public ResponseEntity<List<Registration>> getPaidByEvent(@PathVariable Integer eventId) {
+    public ResponseEntity<List<RegistrationDto.Response>> getPaidByEvent(@PathVariable Integer eventId) {
         return ResponseEntity.ok(registrationService.getPaidByEvent(eventId));
     }
 
     @GetMapping("/event/{eventId}/session/{sessionId}")
-    public ResponseEntity<List<Registration>> getPaidByEventAndSession(
+    public ResponseEntity<List<RegistrationDto.Response>> getPaidByEventAndSession(
             @PathVariable Integer eventId,
             @PathVariable Integer sessionId
     ) {
