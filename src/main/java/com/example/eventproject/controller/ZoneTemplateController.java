@@ -1,17 +1,14 @@
 package com.example.eventproject.controller;
 
-import com.example.eventproject.model.ZoneTemplate;
+import com.example.eventproject.dto.ZoneTemplateDto;
 import com.example.eventproject.service.ZoneTemplateService;
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * Controller สำหรับจัดการ Zone Template (แม่แบบของโซน)
- * ใช้ในฝั่ง Admin ตอนสร้าง Session แบบใช้ Template
- */
 @RestController
 @RequestMapping("/api/zone-templates")
 @RequiredArgsConstructor
@@ -19,23 +16,57 @@ public class ZoneTemplateController {
 
     private final ZoneTemplateService zoneTemplateService;
 
-    /**
-     * GET /api/zone-templates
-     * ดึง Zone Template ทั้งหมด
-     */
+    /* ==========================================================
+       GET — Templates ทั้งหมด
+       ========================================================== */
+    // ดึง Zone Templates ทั้งหมด
     @GetMapping
-    public ResponseEntity<List<String>> getAllTemplateNames() {
-        List<String> names = zoneTemplateService.getAllTemplateNames();
-        return ResponseEntity.ok(names);
+    public ResponseEntity<List<ZoneTemplateDto>> getAll() {
+        return ResponseEntity.ok(zoneTemplateService.getAllTemplates());
     }
 
-    /**
-     * POST /api/zone-templates/clone/{sessionId}
-     * clone template zone ทั้งหมดลงใน session ที่กำหนด
-     */
-    @PostMapping("/clone/{sessionId}")
-    public ResponseEntity<String> cloneZonesToSession(@PathVariable Integer sessionId) {
+    /* ==========================================================
+       POST — Create Template
+       ========================================================== */
+    // สร้าง Zone Template ใหม่
+    @PostMapping(consumes = "application/json")
+    public ResponseEntity<ZoneTemplateDto> create(@RequestBody ZoneTemplateDto dto) {
+        ZoneTemplateDto created = zoneTemplateService.createTemplate(dto);
+        return ResponseEntity.status(201).body(created);
+    }
+
+    /* ==========================================================
+       PUT — Update Template
+       ========================================================== */
+    // แก้ไข Zone Template
+    @PutMapping("/{id}")
+    public ResponseEntity<ZoneTemplateDto> update(
+            @PathVariable Integer id,
+            @RequestBody ZoneTemplateDto dto
+    ) {
+        return ResponseEntity.ok(zoneTemplateService.updateTemplate(id, dto));
+    }
+
+    /* ==========================================================
+       DELETE — Delete Template
+       ========================================================== */
+    // ลบ Zone Template
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Integer id) {
+        zoneTemplateService.deleteTemplate(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /* ==========================================================
+       POST — Clone Templates → Session
+       ========================================================== */
+
+    // คัดลอก Zone Templates ทั้งหมดไปยัง Session ที่เลือก
+    @PostMapping("/clone-to-session/{sessionId}")
+    public ResponseEntity<?> cloneToSession(@PathVariable Integer sessionId) {
         zoneTemplateService.cloneZonesToSession(sessionId);
-        return ResponseEntity.ok("Zones cloned successfully to session " + sessionId);
+        return ResponseEntity.ok().body(
+                "Templates cloned successfully into session " + sessionId
+        );
     }
 }

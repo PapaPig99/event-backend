@@ -47,4 +47,6 @@ public class EventSession {
 
     public List<EventZone> getZones() { return zones; }
     public void setZones(List<EventZone> zones) { this.zones = zones; }
+
+
 }

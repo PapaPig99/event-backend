@@ -287,10 +287,17 @@ public class EventService {
 
     private boolean isFromTemplate(List<EventZone> zones) {
         if (zones == null || zones.isEmpty()) return false;
-        List<String> templateNames = zoneTemplateService.getAllTemplateNames();
+
+        List<String> templateNames = zoneTemplateService.getAllTemplates()
+                .stream()
+                .map(ZoneTemplateDto::name)
+                .toList();
+
         long matchCount = zones.stream()
                 .filter(z -> templateNames.contains(z.getName()))
                 .count();
+
         return (double) matchCount / zones.size() >= 0.8;
     }
+
 }
