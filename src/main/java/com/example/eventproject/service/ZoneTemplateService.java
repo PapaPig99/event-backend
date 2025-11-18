@@ -99,18 +99,21 @@ public class ZoneTemplateService {
     }
 
     /* ==========================================================
-       CLONE : คัดลอกจาก template ทั้งหมด → session
+       CLONE : คัดลอกจาก template
        ========================================================== */
     @Transactional
-    public void cloneZonesToSession(Integer sessionId) {
-        // 1. หา session เป้าหมาย
+    public void cloneSpecificTemplatesToSession(Integer sessionId, List<Integer> templateIds) {
+
+        if (templateIds == null || templateIds.isEmpty()) {
+            throw new IllegalArgumentException("templateIds is empty for session " + sessionId);
+        }
+
         EventSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
 
-        // 2. ดึง template ทั้งหมด
-        var templates = templateRepository.findAll();
+        // ดึง template เฉพาะที่เลือก
+        List<ZoneTemplate> templates = templateRepository.findAllById(templateIds);
 
-        // 3. สร้าง EventZone แยกตาม template
         for (ZoneTemplate tpl : templates) {
             EventZone zone = new EventZone();
             zone.setSession(session);
@@ -118,7 +121,9 @@ public class ZoneTemplateService {
             zone.setGroupName(tpl.getGroupName());
             zone.setCapacity(tpl.getCapacity());
             zone.setPrice(tpl.getPrice());
+
             zoneRepository.save(zone);
         }
     }
+
 }
