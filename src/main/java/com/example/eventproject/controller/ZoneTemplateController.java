@@ -61,12 +61,13 @@ public class ZoneTemplateController {
        POST — Clone Templates → Session
        ========================================================== */
 
-    // คัดลอก Zone Templates ทั้งหมดไปยัง Session ที่เลือก
     @PostMapping("/clone-to-session/{sessionId}")
-    public ResponseEntity<?> cloneToSession(@PathVariable Integer sessionId) {
-        zoneTemplateService.cloneZonesToSession(sessionId);
-        return ResponseEntity.ok().body(
-                "Templates cloned successfully into session " + sessionId
-        );
+    public ResponseEntity<?> cloneToSession(
+            @PathVariable Integer sessionId,
+            @RequestBody List<Integer> templateIds
+    ) {
+        zoneTemplateService.cloneSpecificTemplatesToSession(sessionId, templateIds);
+        return ResponseEntity.ok().body("Templates cloned into session " + sessionId);
     }
+
 }

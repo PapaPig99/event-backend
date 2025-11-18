@@ -19,5 +19,5 @@ public record  EventUpsertRequest(
         String description,
         String posterImageUrl,
         String seatmapImageUrl,
-        List<SessionDto> sessions
+        List<SessionUpsertDto> sessions
 ) {}

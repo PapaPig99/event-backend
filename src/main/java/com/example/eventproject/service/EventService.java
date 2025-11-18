@@ -44,24 +44,44 @@ public class EventService {
     public EventDetailDto get(Integer id) {
         Event e = eventRepo.findDetailById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + id));
-
+        var allTemplates = zoneTemplateService.getAllTemplates();  // โหลดทั้งหมดก่อน
         var sessions = e.getSessions().stream()
-                .map(s -> new SessionDto(
-                        s.getId(),
-                        s.getName(),
-                        s.getStartTime(),
-                        isFromTemplate(s.getZones()),
-                        s.getZones().stream()
-                                .map(z -> new ZoneDto(
-                                        z.getId(),
-                                        z.getName(),
-                                        z.getGroupName(),
-                                        z.getCapacity(),
-                                        z.getPrice()
-                                ))
-                                .toList()
-                ))
+                .map(s -> {
+                    boolean isTemplate = isFromTemplate(s.getZones());
+
+                    // หา templateIds → จากชื่อโซนที่ตรงกับ template
+                    List<Integer> templateIds = isTemplate
+                            ? s.getZones().stream()
+                            .map(z -> allTemplates.stream()
+                                    .filter(t -> t.name().equals(z.getName()))
+                                    .map(ZoneTemplateDto::id)
+                                    .findFirst()
+                                    .orElse(null)
+                            )
+                            .filter(templateId -> templateId != null)
+                            .distinct()
+                            .toList()
+                            : List.of();
+
+                    return new SessionDto(
+                            s.getId(),
+                            s.getName(),
+                            s.getStartTime(),
+                            isTemplate,
+                            templateIds,
+                            s.getZones().stream()
+                                    .map(z -> new ZoneDto(
+                                            z.getId(),
+                                            z.getName(),
+                                            z.getGroupName(),
+                                            z.getCapacity(),
+                                            z.getPrice()
+                                    ))
+                                    .toList()
+                    );
+                })
                 .toList();
+
 
         return new EventDetailDto(
                 e.getId(), e.getTitle(), e.getCategory(), e.getLocation(),
@@ -85,20 +105,25 @@ public class EventService {
         setImagesFromUploadsOrDto(e, dto, poster, seatmap);
         Event savedEvent = eventRepo.save(e);
 
-        //  สร้าง sessions
         if (dto.sessions() != null) {
-            for (SessionDto s : dto.sessions()) {
+            for (SessionUpsertDto s : dto.sessions()) {
+
                 EventSession session = new EventSession();
                 session.setEvent(savedEvent);
                 session.setName(s.name());
                 session.setStartTime(s.startTime());
+
                 EventSession savedSession = sessionRepo.save(session);
 
-                //  ใช้ template
+                // ถ้าเลือก template
                 if (Boolean.TRUE.equals(s.useZoneTemplate())) {
-                    zoneTemplateService.cloneZonesToSession(savedSession.getId());
+                    zoneTemplateService.cloneSpecificTemplatesToSession(
+                            savedSession.getId(),
+                            s.templateIds()
+                    );
                 }
-                // ใช้ custom zones
+
+                // ถ้า custom
                 else if (s.zones() != null && !s.zones().isEmpty()) {
                     for (ZoneDto z : s.zones()) {
                         EventZone zone = new EventZone();
@@ -115,6 +140,7 @@ public class EventService {
 
         return savedEvent.getId();
     }
+
 
     /* ==========================================================
        UPDATE : แก้ไข Event + Sessions + Zones
@@ -134,7 +160,8 @@ public class EventService {
                 .stream().collect(Collectors.toMap(EventSession::getId, s -> s));
 
         if (dto.sessions() != null) {
-            for (SessionDto s : dto.sessions()) {
+            for (SessionUpsertDto s : dto.sessions()) {
+
                 EventSession session = (s.id() != null && existingSessions.containsKey(s.id()))
                         ? existingSessions.get(s.id())
                         : new EventSession();
@@ -144,15 +171,19 @@ public class EventService {
                 session.setStartTime(s.startTime());
                 EventSession savedSession = sessionRepo.save(session);
 
-                // ลบ zone เดิมก่อนเพิ่มใหม่
+                // ลบ zone เดิม
                 var oldZones = zoneRepo.findBySession_Id(savedSession.getId());
                 zoneRepo.deleteAll(oldZones);
 
                 // ใช้ template
                 if (Boolean.TRUE.equals(s.useZoneTemplate())) {
-                    zoneTemplateService.cloneZonesToSession(savedSession.getId());
+                    zoneTemplateService.cloneSpecificTemplatesToSession(
+                            savedSession.getId(),
+                            s.templateIds()
+                    );
                 }
-                // ใช้ custom zones
+
+                // custom
                 else if (s.zones() != null && !s.zones().isEmpty()) {
                     for (ZoneDto z : s.zones()) {
                         EventZone zone = new EventZone();
@@ -167,6 +198,7 @@ public class EventService {
             }
         }
     }
+
 
     /* ==========================================================
        DELETE : ลบ Event ทั้งหมด (รวม sessions / zones / regis)
@@ -232,24 +264,44 @@ public class EventService {
     public EventDetailViewDto getView(Integer id) {
         Event e = eventRepo.findDetailById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + id));
-
+        var allTemplates = zoneTemplateService.getAllTemplates();  // โหลดทั้งหมดก่อน
         var sessions = e.getSessions().stream()
-                .map(s -> new SessionDto(
-                        s.getId(),
-                        s.getName(),
-                        s.getStartTime(),
-                        isFromTemplate(s.getZones()),
-                        s.getZones().stream()
-                                .map(z -> new ZoneDto(
-                                        z.getId(),
-                                        z.getName(),
-                                        z.getGroupName(),
-                                        z.getCapacity(),
-                                        z.getPrice()
-                                ))
-                                .toList()
-                ))
+                .map(s -> {
+                    boolean isTemplate = isFromTemplate(s.getZones());
+
+                    // หา templateIds → จากชื่อโซนที่ตรงกับ template
+                    List<Integer> templateIds = isTemplate
+                            ? s.getZones().stream()
+                            .map(z -> allTemplates.stream()
+                                    .filter(t -> t.name().equals(z.getName()))
+                                    .map(ZoneTemplateDto::id)
+                                    .findFirst()
+                                    .orElse(null)
+                            )
+                            .filter(templateId -> templateId != null)
+                            .distinct()
+                            .toList()
+                            : List.of();
+
+                    return new SessionDto(
+                            s.getId(),
+                            s.getName(),
+                            s.getStartTime(),
+                            isTemplate,
+                            templateIds,
+                            s.getZones().stream()
+                                    .map(z -> new ZoneDto(
+                                            z.getId(),
+                                            z.getName(),
+                                            z.getGroupName(),
+                                            z.getCapacity(),
+                                            z.getPrice()
+                                    ))
+                                    .toList()
+                    );
+                })
                 .toList();
+
 
         var prices = zoneRepo.findAll().stream()
                 .map(z -> new PriceDto(z.getPrice()))

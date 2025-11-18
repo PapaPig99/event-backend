@@ -2,8 +2,7 @@ package com.example.eventproject.dto;
 
 import java.time.LocalTime;
 import java.util.List;
-
-public record SessionDto(
+public record SessionUpsertDto(
         Integer id,
         String name,
         LocalTime startTime,
@@ -11,4 +10,3 @@ public record SessionDto(
         List<Integer> templateIds,
         List<ZoneDto> zones
 ) {}
-
