@@ -4,14 +4,23 @@ import java.util.List;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 
-public interface DashboardRepository extends Repository<com.example.eventproject.model.Event, Long> {
+import com.example.eventproject.model.Event;
 
+public interface DashboardRepository extends Repository<Event, Long> {
+
+    // นับ event ที่ status = 'OPEN'
     @Query(value = "SELECT COUNT(*) FROM events e WHERE e.status='OPEN'", nativeQuery = true)
     long countActiveEvents();
 
+    // รวมจำนวนตั๋วที่ payment_status = 'PAID'
     @Query(value = "SELECT COALESCE(SUM(r.quantity),0) FROM registrations r WHERE r.payment_status='PAID'", nativeQuery = true)
     long sumTicketsSold();
 
+    // ✅ รวมจำนวน registration ทั้งหมด (ทุกสถานะ)
+    @Query(value = "SELECT COALESCE(SUM(r.quantity),0) FROM registrations r", nativeQuery = true)
+    long sumTotalRegistrations();
+
+    // projection สำหรับตาราง sales progress
     interface EventSalesRow {
         Integer getEventId();
         String getTitle();

@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.*;
 
 import com.example.eventproject.dto.OverviewResponse;
 import com.example.eventproject.dto.EventSalesSummary;
+import com.example.eventproject.dto.DashboardFullResponse;
 import com.example.eventproject.service.DashboardService;
 
 import lombok.RequiredArgsConstructor;
@@ -18,18 +19,19 @@ public class DashboardController {
 
     private final DashboardService service;
 
-    //ตัวเลขรวมของวันนี้: activeEvents, ticketsSold
-    @GetMapping("/dashboard/summary")
-    public ResponseEntity<OverviewResponse> summary() {
-        return ResponseEntity.ok(service.getOverview());
-    }
+    //ตัวเลขรวมของวันนี้: activeEvents, ticketsSold  (ของเดิม)
+    @GetMapping("/dashboard")
+public ResponseEntity<DashboardFullResponse> dashboardAlias() {
+    return ResponseEntity.ok(service.getFullOverview());
+}
 
-    //ต่ออีเวนต์ (capacity, sold)
+
+    //ต่ออีเวนต์ (capacity, sold)  (ของเดิม)
     @GetMapping("/dashboard/sales-progress")
     public ResponseEntity<List<EventSalesSummary>> salesProgress() {
         return ResponseEntity.ok(service.getOverview().getSalesProgress());
-
     }
+
     @GetMapping("/events/{eventId}/analytics")
     public ResponseEntity<Void> analytics(
             @PathVariable Integer eventId,
@@ -37,5 +39,11 @@ public class DashboardController {
     ) {
         // intentionally empty: return 200 with empty body
         return ResponseEntity.ok().build();
+    }
+
+    // ⭐ ใหม่: รวมทุก field ที่ Dashboard.vue ต้องใช้
+    @GetMapping("/dashboard/full-summary")
+    public ResponseEntity<DashboardFullResponse> fullSummary() {
+        return ResponseEntity.ok(service.getFullOverview());
     }
 }
