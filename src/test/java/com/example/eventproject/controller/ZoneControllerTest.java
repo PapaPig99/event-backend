@@ -9,9 +9,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.hamcrest.Matchers.equalTo;
@@ -21,10 +26,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-import org.springframework.context.annotation.Import;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.RestControllerAdvice;
+
 /**
  * Controller-only tests for ZoneController:
  * - ปิด security filters
@@ -46,10 +48,10 @@ class ZoneControllerTest {
     void getAvailability_shouldReturn200_andCallService() throws Exception {
         Integer sessionId = 10;
 
-        // ใช้ DTO จริงตาม signature ของ service
+        // ใช้ DTO จริงตาม signature ของ ZoneAvailabilityDto
         List<ZoneAvailabilityDto> payload = List.of(
-                new ZoneAvailabilityDto(1, "A", 100, 40L, 60L),
-                new ZoneAvailabilityDto(2, "B",  80, 80L,  0L)
+                new ZoneAvailabilityDto(1, "A", 100, 40L, 60L, new BigDecimal("500.00")),
+                new ZoneAvailabilityDto(2, "B",  80, 80L,  0L, new BigDecimal("400.00"))
         );
         Mockito.when(zoneService.getAvailabilityBySession(eq(sessionId))).thenReturn(payload);
 
@@ -59,17 +61,17 @@ class ZoneControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$", hasSize(2)))
                 // item #0
-                .andExpect(jsonPath("$[0].zoneId",       equalTo(1)))
-                .andExpect(jsonPath("$[0].zoneName",     equalTo("A")))
-                .andExpect(jsonPath("$[0].capacity",     equalTo(100)))
-                .andExpect(jsonPath("$[0].booked",       equalTo(40)))
-                .andExpect(jsonPath("$[0].available",    equalTo(60)))
+                .andExpect(jsonPath("$[0].zoneId",    equalTo(1)))
+                .andExpect(jsonPath("$[0].zoneName",  equalTo("A")))
+                .andExpect(jsonPath("$[0].capacity",  equalTo(100)))
+                .andExpect(jsonPath("$[0].booked",    equalTo(40)))
+                .andExpect(jsonPath("$[0].available", equalTo(60)))
                 // item #1
-                .andExpect(jsonPath("$[1].zoneId",       equalTo(2)))
-                .andExpect(jsonPath("$[1].zoneName",     equalTo("B")))
-                .andExpect(jsonPath("$[1].capacity",     equalTo(80)))
-                .andExpect(jsonPath("$[1].booked",       equalTo(80)))
-                .andExpect(jsonPath("$[1].available",    equalTo(0)));
+                .andExpect(jsonPath("$[1].zoneId",    equalTo(2)))
+                .andExpect(jsonPath("$[1].zoneName",  equalTo("B")))
+                .andExpect(jsonPath("$[1].capacity",  equalTo(80)))
+                .andExpect(jsonPath("$[1].booked",    equalTo(80)))
+                .andExpect(jsonPath("$[1].available", equalTo(0)));
 
         verify(zoneService, times(1)).getAvailabilityBySession(eq(sessionId));
     }

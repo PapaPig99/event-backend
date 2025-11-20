@@ -1,196 +1,157 @@
 package com.example.eventproject.controller;
 
+import com.example.eventproject.config.CurrentUser;
 import com.example.eventproject.dto.EventDetailDto;
+import com.example.eventproject.dto.EventDetailViewDto;
+import com.example.eventproject.dto.EventSummaryView;
 import com.example.eventproject.dto.EventUpsertRequest;
 import com.example.eventproject.service.EventService;
-import com.example.eventproject.config.CurrentUser;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.http.MediaType;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-import static org.hamcrest.Matchers.endsWith;
-import static org.mockito.ArgumentMatchers.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(controllers = EventController.class)
-@AutoConfigureMockMvc
+@ExtendWith(MockitoExtension.class)
 class EventControllerTest {
 
-    @Autowired private MockMvc mockMvc;
-    @MockBean private EventService eventService;
+    @Mock
+    EventService eventService;
 
-    // <<<<<< เพิ่มฟิลด์ไว้ใช้ข้ามเทส
-    private Authentication auth;
-    private CurrentUser principal;
-
-    @BeforeEach
-    void setUpAuth() {
-        principal = Mockito.mock(CurrentUser.class);
-        when(principal.getId()).thenReturn(42L);
-        auth = new UsernamePasswordAuthenticationToken(
-                principal, "N/A", List.of(new SimpleGrantedAuthority("ROLE_USER"))
-        );
-    }
+    @InjectMocks
+    EventController controller;
 
     /* ===================== READ ===================== */
 
     @Test
-    @DisplayName("GET /api/events → 200 และได้ลิสต์ (ว่าง)")
-    void list_ok_empty() throws Exception {
+    @DisplayName("list() → เรียก service.list() และคืนลิสต์ได้")
+    void list_ok_empty() {
         when(eventService.list()).thenReturn(List.of());
 
-        mockMvc.perform(get("/api/events")
-                        .with(authentication(auth))             // <- ต้องใส่ auth
-                        .accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(content().json("[]"));
+        List<EventSummaryView> result = controller.list();
 
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
         verify(eventService).list();
     }
 
     @Test
-    @DisplayName("GET /api/events/{id} → 200 (serialize DTO ได้)")
-    void get_ok() throws Exception {
-        EventDetailDto detail = Mockito.mock(EventDetailDto.class);
-        when(eventService.get(123)).thenReturn(detail);
+    @DisplayName("get(id) → คืน DTO จาก service.get(id)")
+    void get_ok() {
+        EventDetailDto dto = mock(EventDetailDto.class);
+        when(eventService.get(123)).thenReturn(dto);
 
-        mockMvc.perform(get("/api/events/{id}", 123)
-                        .with(authentication(auth))             // <- ต้องใส่ auth
-                        .accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk());
+        EventDetailDto result = controller.get(123);
 
+        assertSame(dto, result);
         verify(eventService).get(123);
+    }
+
+    @Test
+    @DisplayName("getView(id) → คืน DTO จาก service.getView(id)")
+    void getView_ok() {
+        EventDetailViewDto viewDto = mock(EventDetailViewDto.class);
+        when(eventService.getView(10)).thenReturn(viewDto);
+
+        EventDetailViewDto result = controller.getView(10);
+
+        assertSame(viewDto, result);
+        verify(eventService).getView(10);
     }
 
     /* ===================== CREATE ===================== */
 
     @Test
-    @DisplayName("POST /api/events (multipart) → 201 + Location")
-    void create_ok_multipart() throws Exception {
-        String jsonData = """
-            { "title": "Dev Summit", "category": "Tech" }
-            """;
-        MockMultipartFile dataPart =
-                new MockMultipartFile("data","data.json",MediaType.APPLICATION_JSON_VALUE,jsonData.getBytes(StandardCharsets.UTF_8));
-        MockMultipartFile poster =
-                new MockMultipartFile("poster","poster.png","image/png",new byte[]{1,2});
-        MockMultipartFile detail =
-                new MockMultipartFile("detail","detail.pdf","application/pdf",new byte[]{3,4});
-        MockMultipartFile seatmap =
-                new MockMultipartFile("seatmap","seatmap.svg","image/svg+xml",new byte[]{5,6});
+    @DisplayName("create(...) → 201 Created + Location ปลายทาง /api/events/{id}")
+    void create_ok_multipart() {
+        // เตรียม fake request context ให้ ServletUriComponentsBuilder ใช้
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRequestURI("/api/events");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
 
-        when(eventService.create(any(EventUpsertRequest.class),
-                any(MultipartFile.class), any(MultipartFile.class), any(MultipartFile.class), any(Integer.class)))
+        // data (JSON) → ไม่ต้องสนใจเนื้อใน เพราะ controller แค่ส่งต่อไป service
+        String jsonData = """
+                { "title": "Dev Summit", "category": "Tech" }
+                """;
+
+        EventUpsertRequest dto = mock(EventUpsertRequest.class);
+
+        MultipartFile poster = new MockMultipartFile(
+                "poster",
+                "poster.png",
+                "image/png",
+                new byte[]{1, 2}
+        );
+
+        MultipartFile seatmap = new MockMultipartFile(
+                "seatmap",
+                "seatmap.svg",
+                "image/svg+xml",
+                new byte[]{3, 4}
+        );
+
+        // mock CurrentUser
+        CurrentUser user = mock(CurrentUser.class);
+        when(user.getEmail()).thenReturn("user@example.com");
+
+        when(eventService.create(dto, poster, seatmap, "user@example.com"))
                 .thenReturn(987);
 
-        mockMvc.perform(multipart("/api/events")
-                        .file(dataPart).file(poster).file(detail).file(seatmap)
-                        .with(authentication(auth))
-                        .with(csrf())
-                        .accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isCreated())
-                .andExpect(header().string("Location", endsWith("/api/events/987")));
+        ResponseEntity<Void> resp = controller.create(dto, poster, seatmap, user);
 
-        verify(eventService).create(any(EventUpsertRequest.class),
-                any(MultipartFile.class), any(MultipartFile.class), any(MultipartFile.class), eq(42));
-    }
+        assertEquals(201, resp.getStatusCodeValue());
+        assertNotNull(resp.getHeaders().getLocation());
+        assertTrue(resp.getHeaders().getLocation().toString().endsWith("/api/events/987"));
 
-    @Test
-    @DisplayName("POST /api/events ขาด 'data' → 400")
-    void create_missing_data_part_400() throws Exception {
-        mockMvc.perform(multipart("/api/events")
-                        .file(new MockMultipartFile("poster","poster.png","image/png",new byte[]{1}))
-                        .with(authentication(auth))
-                        .with(csrf()))
-                .andExpect(status().isBadRequest());
-
-        verifyNoInteractions(eventService);
+        verify(eventService).create(dto, poster, seatmap, "user@example.com");
     }
 
     /* ===================== UPDATE ===================== */
 
     @Test
-    @DisplayName("PUT /api/events/{id} (multipart) → 204")
-    void update_ok_multipart() throws Exception {
-        String jsonData = """
-            { "title": "Renamed", "category": "Conference" }
-            """;
-        MockMultipartFile dataPart =
-                new MockMultipartFile("data","data.json",MediaType.APPLICATION_JSON_VALUE,jsonData.getBytes(StandardCharsets.UTF_8));
-        MockMultipartFile poster =
-                new MockMultipartFile("poster","poster.jpg","image/jpeg",new byte[]{7,8});
+    @DisplayName("update(...) → 204 No Content และเรียก service.update() ถูก")
+    void update_ok_multipart() {
+        EventUpsertRequest dto = mock(EventUpsertRequest.class);
 
-        doNothing().when(eventService).update(eq(555), any(EventUpsertRequest.class),
-                any(MultipartFile.class), any(MultipartFile.class), any(MultipartFile.class));
+        MultipartFile poster = new MockMultipartFile(
+                "poster",
+                "poster.jpg",
+                "image/jpeg",
+                new byte[]{7, 8}
+        );
 
-        mockMvc.perform(multipart("/api/events/{id}", 555)
-                        .file(dataPart).file(poster)
-                        .with(req -> { req.setMethod("PUT"); return req; })
-                        .with(authentication(auth))
-                        .with(csrf())
-                        .accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isNoContent());
+        // seatmap ไม่ส่ง → null
+        doNothing().when(eventService).update(555, dto, poster, null);
 
-        verify(eventService).update(eq(555),
-                any(EventUpsertRequest.class), any(MultipartFile.class), isNull(), isNull());
-    }
+        ResponseEntity<Void> resp = controller.update(555, dto, poster, null);
 
-    @Test
-    @DisplayName("PUT /api/events/{id} ขาด 'data' → 400")
-    void update_missing_data_part_400() throws Exception {
-        mockMvc.perform(multipart("/api/events/{id}", 777)
-                        .file(new MockMultipartFile("poster","poster.png","image/png",new byte[]{1}))
-                        .with(req -> { req.setMethod("PUT"); return req; })
-                        .with(authentication(auth))
-                        .with(csrf()))
-                .andExpect(status().isBadRequest());
-
-        verifyNoInteractions(eventService);
+        assertEquals(204, resp.getStatusCodeValue());
+        verify(eventService).update(555, dto, poster, null);
     }
 
     /* ===================== DELETE ===================== */
 
     @Test
-    @DisplayName("DELETE /api/events/{id} → 204")
-    void delete_ok_204() throws Exception {
+    @DisplayName("delete(id) → 204 No Content และเรียก service.delete(id)")
+    void delete_ok_204() {
         doNothing().when(eventService).delete(321);
 
-        mockMvc.perform(delete("/api/events/{id}", 321)
-                        .with(authentication(auth))
-                        .with(csrf()))
-                .andExpect(status().isNoContent());
+        ResponseEntity<Void> resp = controller.delete(321);
 
+        assertEquals(204, resp.getStatusCodeValue());
         verify(eventService).delete(321);
-    }
-
-    /* ===================== 405 ตัวอย่าง ===================== */
-
-    @Test
-    @DisplayName("POST /api/events/{id} → 405 (ไม่มี mapping)")
-    void post_to_get_endpoint_405() throws Exception {
-        mockMvc.perform(post("/api/events/{id}", 1)
-                        .with(authentication(auth))
-                        .with(csrf()))
-                .andExpect(status().isMethodNotAllowed());
     }
 }

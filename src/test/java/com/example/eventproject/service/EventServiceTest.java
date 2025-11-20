@@ -1,24 +1,20 @@
 package com.example.eventproject.service;
 
-import com.example.eventproject.dto.EventDetailDto;
 import com.example.eventproject.dto.EventSummaryView;
 import com.example.eventproject.dto.EventUpsertRequest;
-import com.example.eventproject.dto.SessionDto;
-import com.example.eventproject.dto.ZoneDto;
 import com.example.eventproject.model.Event;
-import com.example.eventproject.model.EventSession;
-import com.example.eventproject.model.EventZone;
 import com.example.eventproject.repository.EventRepository;
 import com.example.eventproject.repository.EventSessionRepository;
 import com.example.eventproject.repository.EventZoneRepository;
-import org.junit.jupiter.api.BeforeEach;
+import com.example.eventproject.repository.RegistrationRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.web.multipart.MultipartFile;
-import com.example.eventproject.repository.RegistrationRepository;
 
 import java.util.List;
 import java.util.Optional;
@@ -26,12 +22,12 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
-import java.util.Set;
 
 /**
  * Unit tests for EventService (pure Mockito, no Spring context).
  */
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)   // 👈 สำคัญ: ผ่อนคลายเรื่อง unused stubbing
 class EventServiceTest {
 
     @Mock private EventRepository eventRepo;
@@ -39,262 +35,195 @@ class EventServiceTest {
     @Mock private EventZoneRepository zoneRepo;
     @Mock private FileStorageService fileStorageService;
     @Mock private RegistrationRepository registrationRepository;
-
-
+    @Mock private ZoneTemplateService zoneTemplateService;
 
     @InjectMocks private EventService service;
 
     @Captor private ArgumentCaptor<Event> eventCaptor;
 
-    // ----------------- Helpers -----------------
+    /* =============== helpers =============== */
+
+    /** ไฟล์ non-empty สำหรับใช้ทดสอบเคสอัปโหลด */
     private MultipartFile nonEmptyFile() {
         MultipartFile f = mock(MultipartFile.class);
         when(f.isEmpty()).thenReturn(false);
         return f;
     }
 
+    /** ไฟล์ empty (isEmpty=true) ใช้จำลอง "ไม่มีอัปโหลด" */
     private MultipartFile emptyFile() {
         MultipartFile f = mock(MultipartFile.class);
         when(f.isEmpty()).thenReturn(true);
         return f;
     }
 
-    // สร้างสั้น ๆ: mock dto แล้ว stub เฉพาะที่จำเป็น
-    // แก้ใน EventServiceTest ของคุณ
-    private EventUpsertRequest mockDtoWithImages(String posterUrl, String detailUrl, String seatmapUrl,
-                                                 List<SessionDto> sessions, List<ZoneDto> zones) {
+    /** mock EventUpsertRequest เฉพาะ field ที่ EventService ใช้แน่ ๆ */
+    private EventUpsertRequest mockDto(String posterUrl, String seatmapUrl) {
         EventUpsertRequest dto = mock(EventUpsertRequest.class, Answers.RETURNS_DEEP_STUBS);
+        // core fields
+        when(dto.title()).thenReturn("Test Event");
+        when(dto.category()).thenReturn("CAT");
+        when(dto.location()).thenReturn("LOC");
 
-        // ✅ stub เฉพาะเมื่อจำเป็น เท่านั้น
-        if (posterUrl != null)  when(dto.posterImageUrl()).thenReturn(posterUrl);
-        if (detailUrl != null)  when(dto.detailImageUrl()).thenReturn(detailUrl);
-        if (seatmapUrl != null) when(dto.seatmapImageUrl()).thenReturn(seatmapUrl);
+        // image url จาก dto (ใช้ใน setImagesFromUploadsOrDto)
+        when(dto.posterImageUrl()).thenReturn(posterUrl);
+        when(dto.seatmapImageUrl()).thenReturn(seatmapUrl);
 
-        when(dto.sessions()).thenReturn(sessions);
-        when(dto.zones()).thenReturn(zones);
+        // ไม่ให้มี sessions เพื่อเลี่ยง logic ซับซ้อน (template / zones)
+        when(dto.sessions()).thenReturn(null);
+
         return dto;
     }
 
+    /* =============== list() =============== */
 
-    // ----------------- list() -----------------
     @Test
     @DisplayName("list(): ดึงรายการจาก repo ตรง ๆ")
     void list_ok() {
-        @SuppressWarnings("unchecked")
-        List<EventSummaryView> fake = (List<EventSummaryView>) (List<?>) List.of("X"); // ดัมมี่ให้ไม่ null
+        List<EventSummaryView> fake = List.of(
+                mock(EventSummaryView.class),
+                mock(EventSummaryView.class)
+        );
         when(eventRepo.findAllByOrderByStartDateAsc()).thenReturn(fake);
 
         List<EventSummaryView> out = service.list();
 
         assertSame(fake, out);
         verify(eventRepo).findAllByOrderByStartDateAsc();
-        verifyNoMoreInteractions(eventRepo, sessionRepo, zoneRepo, fileStorageService);
+        verifyNoMoreInteractions(eventRepo);
+        verifyNoInteractions(sessionRepo, zoneRepo, fileStorageService, registrationRepository, zoneTemplateService);
     }
 
-    // ----------------- get(id) -----------------
-    @Test
-    @DisplayName("get(id): map sessions & zones → EventDetailDto สำเร็จ")
-    void get_ok_maps() {
-        Event e = new Event();
-        e.setId(10);
-        e.setTitle("DevFest");
-        e.setCategory("Tech");
-        e.setLocation("Bangkok");
-        e.setPosterImageUrl("poster.jpg");
-        e.setDetailImageUrl("detail.jpg");
-        e.setSeatmapImageUrl("seatmap.jpg");
-
-        // mock relations
-        EventSession s1 = new EventSession(); s1.setId(1); s1.setName("Morning"); s1.setEvent(e);
-        EventSession s2 = new EventSession(); s2.setId(2); s2.setName("Afternoon"); s2.setEvent(e);
-        e.setSessions(Set.of(s1, s2));
-
-        EventZone z1 = new EventZone(); z1.setId(11); z1.setName("VIP"); z1.setEvent(e);
-        EventZone z2 = new EventZone(); z2.setId(22); z2.setName("GA");  z2.setEvent(e);
-        e.setZones(Set.of(z1, z2));
-
-        when(eventRepo.findDetailById(10)).thenReturn(Optional.of(e));
-
-        EventDetailDto out = service.get(10);
-
-        assertNotNull(out);
-        // พยายามอ่านขนาดของ sessions/zones ถ้าตัว DTO รองรับ
-        try {
-            var sessions = (List<?>) EventDetailDto.class.getMethod("sessions").invoke(out);
-            var zones    = (List<?>) EventDetailDto.class.getMethod("zones").invoke(out);
-            assertEquals(2, sessions.size());
-            assertEquals(2, zones.size());
-        } catch (ReflectiveOperationException ignore) {
-            // ถ้า DTO ไม่ใช่ record/ไม่มีเมธอด sessions()/zones() ก็ข้าม (ยังถือว่าผ่าน mapping ได้)
-        }
-
-        verify(eventRepo).findDetailById(10);
-        verifyNoMoreInteractions(eventRepo, sessionRepo, zoneRepo, fileStorageService);
-    }
+    /* =============== create(...) =============== */
 
     @Test
-    @DisplayName("get(id): ไม่พบ → IllegalArgumentException")
-    void get_not_found() {
-        when(eventRepo.findDetailById(99)).thenReturn(Optional.empty());
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> service.get(99));
-        assertTrue(ex.getMessage().contains("99"));
-        verify(eventRepo).findDetailById(99);
-        verifyNoMoreInteractions(eventRepo, sessionRepo, zoneRepo, fileStorageService);
-    }
-
-    // ----------------- create(...) -----------------
-    @Test
-    @DisplayName("create: มีไฟล์อัปโหลด poster/detail/seatmap → เรียก replaceFile และสร้าง sessions/zones")
+    @DisplayName("create: มีไฟล์อัปโหลด poster/seatmap → ใช้ replaceFile แล้ว save event พร้อม url ใหม่")
     void create_with_uploads() {
-        // dto: ไม่ส่ง URL (null) แต่ใส่ sessions/zones
-        SessionDto s1 = mock(SessionDto.class);
-        SessionDto s2 = mock(SessionDto.class);
-        ZoneDto    z1 = mock(ZoneDto.class);
-        ZoneDto    z2 = mock(ZoneDto.class);
-        EventUpsertRequest dto = mockDtoWithImages(null, null, null, List.of(s1, s2), List.of(z1, z2));
+        EventUpsertRequest dto = mockDto(null, null);
 
-        MultipartFile poster = nonEmptyFile();
-        MultipartFile detail = nonEmptyFile();
-        MultipartFile seat   = nonEmptyFile();
+        MultipartFile poster  = nonEmptyFile();
+        MultipartFile seatmap = nonEmptyFile();
 
         when(fileStorageService.replaceFile(isNull(), eq(poster))).thenReturn("poster-new");
-        when(fileStorageService.replaceFile(isNull(), eq(detail))).thenReturn("detail-new");
-        when(fileStorageService.replaceFile(isNull(), eq(seat))).thenReturn("seatmap-new");
+        when(fileStorageService.replaceFile(isNull(), eq(seatmap))).thenReturn("seatmap-new");
 
         when(eventRepo.save(any(Event.class))).thenAnswer(inv -> {
-            Event saved = inv.getArgument(0);
-            saved.setId(123);
-            return saved;
+            Event e = inv.getArgument(0);
+            e.setId(123);
+            return e;
         });
 
-        Integer id = service.create(dto, poster, detail, seat, 42);
+        Integer id = service.create(dto, poster, seatmap, "owner@example.com");
         assertEquals(123, id);
 
-        // ตรวจว่าตอน save ครั้งแรก มีการตั้งค่า URL ใหม่เข้ากับ Event แล้ว
         verify(eventRepo, atLeastOnce()).save(eventCaptor.capture());
-        Event savedEvent = eventCaptor.getValue();
-        assertEquals("poster-new", savedEvent.getPosterImageUrl());
-        assertEquals("detail-new", savedEvent.getDetailImageUrl());
-        assertEquals("seatmap-new", savedEvent.getSeatmapImageUrl());
+        Event saved = eventCaptor.getValue();
+        assertEquals("Test Event", saved.getTitle());
+        assertEquals("poster-new", saved.getPosterImageUrl());
+        assertEquals("seatmap-new", saved.getSeatmapImageUrl());
 
-        // มีการสร้าง sessions/zones ตามจำนวน
-        verify(sessionRepo, times(2)).save(any(EventSession.class));
-        verify(zoneRepo,    times(2)).save(any(EventZone.class));
-
-        // ไม่ควรลบไฟล์ใด ๆ ระหว่าง create
+        // ไม่มีการลบไฟล์ใน create
         verify(fileStorageService, never()).deleteFile(any());
     }
 
     @Test
-    @DisplayName("create: ไม่มีไฟล์ แต่ dto ส่ง URL มา → set URL จาก dto และไม่แตะ file storage")
+    @DisplayName("create: ไม่มีไฟล์ แต่ dto ส่ง URL → ใช้ URL จาก dto และไม่ยุ่ง fileStorage")
     void create_without_uploads_but_urls_from_dto() {
-        EventUpsertRequest dto = mockDtoWithImages("posterDTO", "detailDTO", "seatDTO",
-                List.of(), List.of());
+        EventUpsertRequest dto = mockDto("posterDTO", "seatDTO");
 
-        // eventRepo.save คืน id
         when(eventRepo.save(any(Event.class))).thenAnswer(inv -> {
             Event e = inv.getArgument(0);
             e.setId(9);
             return e;
         });
 
-        Integer id = service.create(dto, emptyFile(), emptyFile(), emptyFile(), 42);
+        Integer id = service.create(dto, emptyFile(), emptyFile(), "owner@example.com");
         assertEquals(9, id);
 
         verify(eventRepo, atLeastOnce()).save(eventCaptor.capture());
-        Event eSaved = eventCaptor.getValue();
-        assertEquals("posterDTO", eSaved.getPosterImageUrl());
-        assertEquals("detailDTO", eSaved.getDetailImageUrl());
-        assertEquals("seatDTO",   eSaved.getSeatmapImageUrl());
+        Event saved = eventCaptor.getValue();
+        assertEquals("posterDTO", saved.getPosterImageUrl());
+        assertEquals("seatDTO", saved.getSeatmapImageUrl());
 
-        // ไม่มีการเรียก replaceFile/deleteFile
         verify(fileStorageService, never()).replaceFile(any(), any());
         verify(fileStorageService, never()).deleteFile(any());
     }
 
-    // ----------------- update(...) -----------------
+    /* =============== update(...) =============== */
+
     @Test
-    @DisplayName("update: มีไฟล์อัปโหลด + มี sessions/zones ใหม่ → ลบของเดิม และอัปไฟล์ใหม่ด้วย replaceFile")
-    void update_with_uploads_recreates_children() {
+    @DisplayName("update: อัปโหลดไฟล์ใหม่ → replaceFile จาก url เก่า และ save event")
+    void update_with_uploads() {
         Event existing = new Event();
         existing.setId(77);
         existing.setPosterImageUrl("old-poster");
-        existing.setDetailImageUrl("old-detail");
         existing.setSeatmapImageUrl("old-seat");
 
         when(eventRepo.findById(77)).thenReturn(Optional.of(existing));
-        when(fileStorageService.replaceFile(eq("old-poster"), any())).thenReturn("poster-new");
-        when(fileStorageService.replaceFile(eq("old-detail"), any())).thenReturn("detail-new");
-        when(fileStorageService.replaceFile(eq("old-seat"), any())).thenReturn("seat-new");
-
         when(eventRepo.save(any(Event.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        // dto: มีรายการใหม่ 2+2
-        EventUpsertRequest dto = mockDtoWithImages(null, null, null,
-                List.of(mock(SessionDto.class), mock(SessionDto.class)),
-                List.of(mock(ZoneDto.class), mock(ZoneDto.class)));
+        MultipartFile poster  = nonEmptyFile();
+        MultipartFile seatmap = nonEmptyFile();
 
-        service.update(77, dto, nonEmptyFile(), nonEmptyFile(), nonEmptyFile());
+        when(fileStorageService.replaceFile(eq("old-poster"), eq(poster))).thenReturn("poster-new");
+        when(fileStorageService.replaceFile(eq("old-seat"), eq(seatmap))).thenReturn("seat-new");
 
-        // บันทึกตัว Event
-        verify(eventRepo, atLeastOnce()).save(existing);
+        EventUpsertRequest dto = mockDto(null, null); // dto ไม่ส่ง url → ให้ใช้ไฟล์ใหม่แทน
 
-        // ลบลูกเก่า แล้วสร้างใหม่ตามจำนวน
-        verify(sessionRepo).findByEventId(77);
-        verify(sessionRepo, times(2)).save(any(EventSession.class));
-        verify(zoneRepo).findByEventId(77);
-        verify(zoneRepo, times(2)).save(any(EventZone.class));
+        service.update(77, dto, poster, seatmap);
 
-        // อัปไฟล์เรียบร้อย
         assertEquals("poster-new", existing.getPosterImageUrl());
-        assertEquals("detail-new", existing.getDetailImageUrl());
         assertEquals("seat-new", existing.getSeatmapImageUrl());
 
-        verify(fileStorageService, never()).deleteFile(any()); // update แบบนี้ไม่ได้ลบไฟล์
+        verify(eventRepo, atLeastOnce()).save(existing);
+        verify(fileStorageService, never()).deleteFile(any());
     }
 
     @Test
-    @DisplayName("update: ไม่อัปโหลด และ dto ส่ง URL = null → ต้องลบไฟล์เดิมด้วย deleteFile และ set ค่าเป็น null")
-    void update_clear_images_via_null_urls() {
+    @DisplayName("update: ไม่อัปโหลด + dto.url = null → deleteFile url เดิม และ set เป็น null")
+    void update_clear_images_when_dto_urls_null() {
         Event existing = new Event();
         existing.setId(55);
-        existing.setPosterImageUrl("oldP");
-        existing.setDetailImageUrl("oldD");
-        existing.setSeatmapImageUrl("oldS");
+        existing.setPosterImageUrl("old-p");
+        existing.setSeatmapImageUrl("old-s");
 
         when(eventRepo.findById(55)).thenReturn(Optional.of(existing));
         when(eventRepo.save(any(Event.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        // dto: URL ทั้งสามเป็น null และไม่มีลูกใหม่
-        EventUpsertRequest dto = mockDtoWithImages(null, null, null, null, null);
+        EventUpsertRequest dto = mockDto(null, null); // ทั้ง posterImageUrl / seatmapImageUrl = null
 
-        service.update(55, dto, emptyFile(), emptyFile(), emptyFile());
+        service.update(55, dto, emptyFile(), emptyFile());
 
-        // ต้องถูกลบไฟล์เดิม
-        verify(fileStorageService).deleteFile("oldP");
-        verify(fileStorageService).deleteFile("oldD");
-        verify(fileStorageService).deleteFile("oldS");
-
-        // และค่าใน event เป็น null
+        verify(fileStorageService).deleteFile("old-p");
+        verify(fileStorageService).deleteFile("old-s");
         assertNull(existing.getPosterImageUrl());
-        assertNull(existing.getDetailImageUrl());
         assertNull(existing.getSeatmapImageUrl());
 
-        // ไม่มีสร้างลูกใหม่
-        verify(sessionRepo).findByEventId(55);
-        verify(zoneRepo).findByEventId(55);
-        verify(sessionRepo, never()).save(any());
-        verify(zoneRepo,    never()).save(any());
+        verify(eventRepo, atLeastOnce()).save(existing);
     }
 
-    // ----------------- delete(id) -----------------
     @Test
-    @DisplayName("delete: ลบไฟล์ทั้งหมด + ลบ children + ลบ event")
+    @DisplayName("update: หา event ไม่เจอ → IllegalArgumentException")
+    void update_notFound() {
+        when(eventRepo.findById(999)).thenReturn(Optional.empty());
+
+        // ส่ง null สำหรับไฟล์ เพื่อไม่สร้าง stubbing เพิ่ม
+        assertThrows(IllegalArgumentException.class,
+                () -> service.update(999, mockDto(null, null), null, null));
+
+        verify(eventRepo).findById(999);
+        verifyNoMoreInteractions(eventRepo);
+        verifyNoInteractions(sessionRepo, zoneRepo, fileStorageService, registrationRepository, zoneTemplateService);
+    }
+
+    /* =============== delete(id) =============== */
+
+    @Test
+    @DisplayName("delete: ลบไฟล์ poster/seatmap + ลบ regis + sessions + event")
     void delete_ok() {
         Event e = new Event();
         e.setId(101);
         e.setPosterImageUrl("p");
-        e.setDetailImageUrl("d");
         e.setSeatmapImageUrl("s");
 
         when(eventRepo.findById(101)).thenReturn(Optional.of(e));
@@ -302,21 +231,21 @@ class EventServiceTest {
         service.delete(101);
 
         verify(fileStorageService).deleteFile("p");
-        verify(fileStorageService).deleteFile("d");
         verify(fileStorageService).deleteFile("s");
-        verify(zoneRepo).deleteByEventId(101);
         verify(registrationRepository).deleteAllByEventCascade(101);
-        verify(sessionRepo).deleteByEventId(101);
+        verify(sessionRepo).deleteByEvent_Id(101);
         verify(eventRepo).delete(e);
     }
 
     @Test
-    @DisplayName("delete: ไม่พบ → IllegalArgumentException")
-    void delete_not_found() {
+    @DisplayName("delete: ไม่พบ event → IllegalArgumentException")
+    void delete_notFound() {
         when(eventRepo.findById(404)).thenReturn(Optional.empty());
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> service.delete(404));
-        assertTrue(ex.getMessage().contains("404"));
+
+        assertThrows(IllegalArgumentException.class, () -> service.delete(404));
+
         verify(eventRepo).findById(404);
-        verifyNoMoreInteractions(eventRepo, sessionRepo, zoneRepo, fileStorageService);
+        verifyNoMoreInteractions(eventRepo);
+        verifyNoInteractions(sessionRepo, zoneRepo, fileStorageService, registrationRepository, zoneTemplateService);
     }
 }

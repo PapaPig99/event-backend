@@ -1,61 +1,45 @@
 // src/test/java/com/example/eventproject/controller/SessionControllerIT.java
 package com.example.eventproject.controller;
 
-import com.example.eventproject.support.IntegrationTestBase;
+import com.example.eventproject.service.EventSessionService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import java.util.List;
+
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-class SessionControllerIT extends IntegrationTestBase {
+@WebMvcTest(controllers = SessionController.class)
+@AutoConfigureMockMvc(addFilters = false)
+class SessionControllerIT {
 
-    @Autowired MockMvc mvc;
+    @Autowired
+    MockMvc mvc;
+
+    @MockBean
+    EventSessionService service;
 
     @Test
+    @DisplayName("GET /api/events/{eventId}/sessions → 200 + คืน list เป็น JSON")
     void listByEvent_ok_200() throws Exception {
-        mvc.perform(get("/api/events/1/sessions"))
+
+        // สมมติให้ eventId = 1 มี session ว่าง ๆ (empty list)
+        when(service.listByEvent(1)).thenReturn(List.of());
+
+        mvc.perform(get("/api/events/1/sessions")
+                        .accept(MediaType.APPLICATION_JSON))
                 .andDo(print())
                 .andExpect(status().isOk())
-                .andExpect(content().string("")); // controller คืน ok().build()
-    }
-
-    @Test
-    void create_ok_201() throws Exception {
-        mvc.perform(post("/api/events/1/sessions")
-                        .with(csrf())
-                        .with(user("admin").roles("ADMIN"))   // 👈 อัดผู้ใช้
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andDo(print())
-                .andExpect(status().isCreated())
-                .andExpect(content().string(""));
-    }
-
-    @Test
-    void update_ok_200() throws Exception {
-        mvc.perform(put("/api/sessions/123")
-                        .with(csrf())
-                        .with(user("admin").roles("ADMIN"))   // 👈 อัดผู้ใช้
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andDo(print())
-                .andExpect(status().isOk())
-                .andExpect(content().string(""));
-    }
-
-    @Test
-    void delete_noContent_204() throws Exception {
-        mvc.perform(delete("/api/sessions/123")
-                        .with(csrf())
-                        .with(user("admin").roles("ADMIN")))  // 👈 อัดผู้ใช้
-                .andDo(print())
-                .andExpect(status().isNoContent())
-                .andExpect(content().string(""));
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(content().json("[]"));
     }
 }

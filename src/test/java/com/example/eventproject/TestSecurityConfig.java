@@ -1,4 +1,3 @@
-// src/test/java/com/example/eventproject/TestSecurityConfig.java
 package com.example.eventproject;
 
 import com.example.eventproject.config.CurrentUser;
@@ -31,7 +30,14 @@ public class TestSecurityConfig {
                     throws ServletException, IOException {
 
                 List<GrantedAuthority> roles = List.of(new SimpleGrantedAuthority("ROLE_ADMIN"));
-                CurrentUser principal = new CurrentUser(1L, "admin@test.com", "Administrator", roles);
+
+                // 🟢 id ต้องเป็น String ไม่ใช่ long
+                CurrentUser principal = new CurrentUser(
+                        "1",
+                        "admin@test.com",
+                        "Administrator",
+                        roles
+                );
 
                 AbstractAuthenticationToken auth = new AbstractAuthenticationToken(roles) {
                     @Override public Object getCredentials() { return ""; }
@@ -53,4 +59,3 @@ public class TestSecurityConfig {
                 .build();
     }
 }
-

@@ -1,12 +1,14 @@
+// src/test/java/com/example/eventproject/service/DashboardServiceTest.java
 package com.example.eventproject.service;
 
+import com.example.eventproject.dto.DashboardDto;
 import com.example.eventproject.dto.EventSalesSummary;
-import com.example.eventproject.dto.OverviewResponse;
+import com.example.eventproject.model.Event;
 import com.example.eventproject.repository.DashboardRepository;
+import com.example.eventproject.repository.EventRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Answers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -14,105 +16,139 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.*;
 
-/**
- * ✅ Unit Test ครอบคลุม DashboardService#getOverview()
- * - ทดสอบรวมยอด activeEvents / ticketsSold
- * - ทดสอบ map ข้อมูลจาก EventSalesRow → EventSalesSummary
- * - ทดสอบ null และ empty list
- */
 @ExtendWith(MockitoExtension.class)
 class DashboardServiceTest {
 
     @Mock
-    private DashboardRepository repo;
+    DashboardRepository repo;
+
+    @Mock
+    EventRepository eventRepo;
 
     @InjectMocks
-    private DashboardService service;
+    DashboardService service;
 
-    // ---------- Helper ----------
-    private DashboardRepository.EventSalesRow row(Integer eventId, String title, String category,
-                                                  Long capacity, Long sold) {
-        var r = mock(DashboardRepository.EventSalesRow.class, Answers.RETURNS_DEEP_STUBS);
-        when(r.getEventId()).thenReturn(eventId);
-        when(r.getTitle()).thenReturn(title);
-        when(r.getCategory()).thenReturn(category);
-        when(r.getCapacity()).thenReturn(capacity);
-        when(r.getSold()).thenReturn(sold);
-        return r;
-    }
+    // ========================================================================
+    // getDashboard(null)  — สรุปทั้งหมด
+    // ========================================================================
 
     @Test
-    @DisplayName("getOverview(): ปกติ → รวมยอดและ map ข้อมูลถูกต้อง")
-    void getOverview_normal_case() {
-        // Arrange
-        when(repo.countActiveEvents()).thenReturn(5L);
-        when(repo.sumTicketsSold()).thenReturn(100L);
+    @DisplayName("getDashboard(null): คำนวณสรุปทุก Event ถูกต้อง")
+    void getDashboard_allEvents() {
+        when(repo.countActiveEvents()).thenReturn(3L);
+        when(repo.countTicketsSoldAll()).thenReturn(80L);
+        when(repo.countRegistrationsAll()).thenReturn(100L);
+        when(repo.countCheckinAll()).thenReturn(60L);
 
-        var r1 = row(1, "DevFest", "Tech", 500L, 200L);
-        var r2 = row(2, "PyCon", "Programming", 300L, 150L);
-        when(repo.findSalesRows()).thenReturn(List.of(r1, r2));
+        DashboardDto dto = service.getDashboard(null);
 
-        // Act
-        OverviewResponse out = service.getOverview();
+        assertNotNull(dto);
 
-        // Assert
-        assertEquals(5L, out.getActiveEvents());
-        assertEquals(100L, out.getTicketsSold());
-        assertEquals(2, out.getSalesProgress().size());
-
-        EventSalesSummary e1 = out.getSalesProgress().get(0);
-        assertEquals(1, e1.getId());
-        assertEquals("DevFest", e1.getTitle());
-        assertEquals("Tech", e1.getCategory());
-        assertEquals(500L, e1.getCapacity());
-        assertEquals(200L, e1.getSold());
-
-        EventSalesSummary e2 = out.getSalesProgress().get(1);
-        assertEquals(2, e2.getId());
-        assertEquals("PyCon", e2.getTitle());
-        assertEquals("Programming", e2.getCategory());
-        assertEquals(300L, e2.getCapacity());
-        assertEquals(150L, e2.getSold());
+        assertEquals(3L, dto.activeEvents());
+        assertEquals(80L, dto.ticketsSold());
+        assertEquals(100L, dto.totalRegistrations());
+        assertEquals(100L, dto.totalSignups());
+        assertEquals(20L, dto.dropOffs());
+        assertEquals(75L, dto.showRate());
+        assertEquals(60L, dto.checkIn());
 
         verify(repo).countActiveEvents();
-        verify(repo).sumTicketsSold();
-        verify(repo).findSalesRows();
+        verify(repo).countTicketsSoldAll();
+        verify(repo).countRegistrationsAll();
+        verify(repo).countCheckinAll();
         verifyNoMoreInteractions(repo);
+        verifyNoInteractions(eventRepo);
     }
 
+    // ========================================================================
+    // getDashboard(eventId)  — เฉพาะ event
+    // ========================================================================
+
     @Test
-    @DisplayName("getOverview(): capacity/sold == null → ต้องถูก map เป็น 0L")
-    void getOverview_null_values() {
-        when(repo.countActiveEvents()).thenReturn(2L);
-        when(repo.sumTicketsSold()).thenReturn(20L);
+    @DisplayName("getDashboard(eventId): คำนวณสรุปเฉพาะ Event ถูกต้อง")
+    void getDashboard_specificEvent() {
+        Integer eventId = 10;
 
-        var r = row(9, "No Data", "Misc", null, null);
-        when(repo.findSalesRows()).thenReturn(List.of(r));
+        when(repo.countSignupsByEvent(eventId)).thenReturn(50L);
+        when(repo.countDropoffsByEvent(eventId)).thenReturn(10L);
+        when(repo.countTicketsSoldByEvent(eventId)).thenReturn(40L);
+        when(repo.countCheckinByEvent(eventId)).thenReturn(30L);
 
-        OverviewResponse out = service.getOverview();
-        assertEquals(2L, out.getActiveEvents());
-        assertEquals(20L, out.getTicketsSold());
-        assertEquals(1, out.getSalesProgress().size());
+        DashboardDto dto = service.getDashboard(eventId);
 
-        EventSalesSummary s = out.getSalesProgress().get(0);
-        assertEquals(0L, s.getCapacity());
-        assertEquals(0L, s.getSold());
+        assertNotNull(dto);
+
+        assertEquals(0L, dto.activeEvents());
+        assertEquals(40L, dto.ticketsSold());
+        assertEquals(50L, dto.totalRegistrations());
+        assertEquals(50L, dto.totalSignups());
+        assertEquals(10L, dto.dropOffs());
+        assertEquals(75L, dto.showRate());
+        assertEquals(30L, dto.checkIn());
+
+        verify(repo).countSignupsByEvent(eventId);
+        verify(repo).countDropoffsByEvent(eventId);
+        verify(repo).countTicketsSoldByEvent(eventId);
+        verify(repo).countCheckinByEvent(eventId);
+        verifyNoMoreInteractions(repo);
+        verifyNoInteractions(eventRepo);
     }
 
+    // ========================================================================
+    // getEventTable()
+    // ========================================================================
+
     @Test
-    @DisplayName("getOverview(): repo.findSalesRows() ว่าง → คืน salesProgress=[]")
-    void getOverview_empty_list() {
-        when(repo.countActiveEvents()).thenReturn(1L);
-        when(repo.sumTicketsSold()).thenReturn(5L);
-        when(repo.findSalesRows()).thenReturn(List.of());
+    @DisplayName("getEventTable(): map Event → EventSalesSummary ถูกต้อง")
+    void getEventTable_ok() {
 
-        OverviewResponse out = service.getOverview();
+        Event e1 = new Event();
+        e1.setId(1);
+        e1.setTitle("DevConf");
+        e1.setCategory("Tech");
 
-        assertEquals(1L, out.getActiveEvents());
-        assertEquals(5L, out.getTicketsSold());
-        assertNotNull(out.getSalesProgress());
-        assertTrue(out.getSalesProgress().isEmpty());
+        Event e2 = new Event();
+        e2.setId(2);
+        e2.setTitle("Music Fest");
+        e2.setCategory("Festival");
+
+        // ให้ repo คืน list ของ event 2 ตัวนี้
+        when(eventRepo.findAll()).thenReturn(List.of(e1, e2));
+
+        // 👉 ผูก stub ตาม eventId จริง ๆ (หลีกเลี่ยง null + NPE จาก unboxing)
+        when(repo.sumCapacityByEvent(1)).thenReturn(1000L);
+        when(repo.sumCapacityByEvent(2)).thenReturn(500L);
+
+        when(repo.countSoldByEvent(1)).thenReturn(700L);
+        when(repo.countSoldByEvent(2)).thenReturn(250L);
+
+        List<EventSalesSummary> result = service.getEventTable();
+
+        assertNotNull(result);
+        assertEquals(2, result.size());
+
+        EventSalesSummary s1 = result.get(0);
+        assertEquals(1, s1.eventId());
+        assertEquals("DevConf", s1.title());
+        assertEquals("Tech", s1.category());
+        assertEquals(1000L, s1.capacity());
+        assertEquals(700L, s1.sold());
+
+        EventSalesSummary s2 = result.get(1);
+        assertEquals(2, s2.eventId());
+        assertEquals("Music Fest", s2.title());
+        assertEquals("Festival", s2.category());
+        assertEquals(500L, s2.capacity());
+        assertEquals(250L, s2.sold());
+
+        verify(eventRepo).findAll();
+        verify(repo).sumCapacityByEvent(1);
+        verify(repo).sumCapacityByEvent(2);
+        verify(repo).countSoldByEvent(1);
+        verify(repo).countSoldByEvent(2);
+        verifyNoMoreInteractions(repo, eventRepo);
     }
 }
