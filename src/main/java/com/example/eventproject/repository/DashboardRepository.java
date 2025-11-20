@@ -1,45 +1,52 @@
 package com.example.eventproject.repository;
-
-import java.util.List;
+import com.example.eventproject.model.Registration;
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.Repository;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
-public interface DashboardRepository extends Repository<com.example.eventproject.model.Event, Long> {
+@Repository
+public interface DashboardRepository extends JpaRepository<Registration, Integer> {
 
-    @Query(value = "SELECT COUNT(*) FROM events e WHERE e.status='OPEN'", nativeQuery = true)
+    // ---- All Events ----
+    @Query("SELECT COUNT(e) FROM Event e WHERE e.status = 'OPEN'")
     long countActiveEvents();
 
-    @Query(value = "SELECT COALESCE(SUM(r.quantity),0) FROM registrations r WHERE r.payment_status='PAID'", nativeQuery = true)
-    long sumTicketsSold();
+    @Query("SELECT COUNT(r) FROM Registration r WHERE r.paymentStatus = 'PAID'")
+    long countTicketsSoldAll();
 
-    interface EventSalesRow {
-        Integer getEventId();
-        String getTitle();
-        String getCategory();
-        Long getCapacity();
-        Long getSold();
-    }
+    @Query("SELECT COUNT(r) FROM Registration r")
+    long countRegistrationsAll();
 
-    @Query(value = """
-        SELECT 
-          e.id        AS eventId,
-          e.title     AS title,
-          e.category  AS category,
-          COALESCE(z.cap, 0)  AS capacity,
-          COALESCE(s.sold, 0) AS sold
-        FROM events e
-        LEFT JOIN (
-            SELECT event_id, SUM(capacity) AS cap
-            FROM event_zones
-            GROUP BY event_id
-        ) z ON z.event_id = e.id
-        LEFT JOIN (
-            SELECT event_id, SUM(quantity) AS sold
-            FROM registrations
-            WHERE payment_status='PAID'
-            GROUP BY event_id
-        ) s ON s.event_id = e.id
-        ORDER BY e.created_at DESC
-        """, nativeQuery = true)
-    List<EventSalesRow> findSalesRows();
+    @Query("SELECT COUNT(r) FROM Registration r WHERE r.isCheckedIn = true")
+    long countCheckinAll();
+
+    // ---- Filter by Event ----
+    @Query("SELECT COUNT(r) FROM Registration r WHERE r.event.id = :eventId")
+    long countSignupsByEvent(@Param("eventId") int eventId);
+
+    @Query("SELECT COUNT(r) FROM Registration r " +
+            "WHERE r.event.id = :eventId AND r.paymentStatus != 'PAID'")
+    long countDropoffsByEvent(@Param("eventId") int eventId);
+
+    @Query("SELECT COUNT(r) FROM Registration r " +
+            "WHERE r.event.id = :eventId AND r.paymentStatus = 'PAID'")
+    long countTicketsSoldByEvent(@Param("eventId") int eventId);
+
+    @Query("SELECT COUNT(r) FROM Registration r " +
+            "WHERE r.event.id = :eventId AND r.isCheckedIn = true")
+    long countCheckinByEvent(@Param("eventId") int eventId);
+
+    // หาจำนวน sold ต่อ event
+    @Query("SELECT COUNT(r) FROM Registration r WHERE r.event.id = :eventId AND r.paymentStatus = 'PAID'")
+    long countSoldByEvent(@Param("eventId") int eventId);
+
+    // หา capacity = sum(z.capacity)
+    @Query("SELECT COALESCE(SUM(z.capacity),0) FROM EventZone z WHERE z.session.event.id = :eventId")
+    long sumCapacityByEvent(@Param("eventId") int eventId);
+
 }
+
+
+
+
