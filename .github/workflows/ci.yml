@@ -1,4 +1,4 @@
-name: "CI / Build, Push & E2E (GHCR + Containerized Jobs)"
+name: "Backend CI / Build & Push (GHCR)"
 
 on:
   push:
@@ -6,11 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
-# ชื่อ image สำหรับ GHCR (ยังไม่บังคับตัวเล็ก ณ ตรงนี้)
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/event-backend
 
-# ป้องกันการรันชนกันบน branch เดียวกัน
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -26,10 +24,6 @@ jobs:
       image: gradle:8.7-jdk17
       options: --user root
     steps:
-      - name: Normalize IMAGE_NAME to lowercase
-        run: |
-          echo "IMAGE_NAME=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -87,10 +81,6 @@ jobs:
       image: gradle:8.7-jdk17
       options: --user root
     steps:
-      - name: Normalize IMAGE_NAME to lowercase
-        run: |
-          echo "IMAGE_NAME=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -135,7 +125,7 @@ jobs:
             ${{ env.BACKEND_DIR }}/build/libs/*.jar
 
   # -------------------------------------------------------------------
-  # 3) Docker: Build & Push ไป GHCR (tag: long+short SHA, + latest)
+  # 3) Docker: Build & Push ไป GHCR (เฉพาะ push เข้าสาขา main)
   # -------------------------------------------------------------------
   docker_build_push:
     name: "Build & Push to GHCR"
@@ -144,6 +134,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # รันเฉพาะตอน push และสาขา main (ไม่รันตอน PR)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Normalize IMAGE_NAME to lowercase
         run: |
@@ -152,7 +144,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ตรวจหา Dockerfile ใน root หรือ event-backend/
       - name: Detect backend dir (for Docker)
         shell: bash
         run: |
@@ -170,7 +161,6 @@ jobs:
           echo "Using BACKEND_DIR=$BACKEND_DIR"
           ls -la "$BACKEND_DIR"
 
-      # ดึง JAR artifact มาใส่ใน context (รองรับ Dockerfile ที่ COPY JAR)
       - name: Download JAR artifact
         uses: actions/download-artifact@v4
         with:
@@ -197,7 +187,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Tag ครบ: long SHA + short SHA + latest(เฉพาะ default branch)
       - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@v5
@@ -218,86 +207,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  # -------------------------------------------------------------------
-  # 4) E2E / Smoke Test: ดึง image จาก GHCR แล้วรัน health check
-  #    - พยายาม pull tag แบบ long ก่อน ถ้าไม่เจอค่อยลอง short
-  # -------------------------------------------------------------------
-  e2e_smoke:
-    name: "E2E Smoke (containerized)"
-    needs: docker_build_push
-    runs-on: ubuntu-latest
-    permissions:
-      packages: read
-    steps:
-      - name: Normalize IMAGE_NAME to lowercase
-        run: |
-          echo "IMAGE_NAME=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
-      - name: Login to GHCR (pull image for test)
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull image (try long then short)
-        env:
-          IMG: ${{ env.IMAGE_NAME }}
-        run: |
-          set -e
-          SHA_LONG="sha-${GITHUB_SHA}"
-          SHA_SHORT="sha-$(echo "${GITHUB_SHA}" | cut -c1-7)"
-
-          echo "Trying long tag: ${IMG}:${SHA_LONG}"
-          if docker pull "${IMG}:${SHA_LONG}"; then
-            echo "TAG=${IMG}:${SHA_LONG}" >> $GITHUB_ENV
-          else
-            echo "Long tag not found, trying short tag: ${IMG}:${SHA_SHORT}"
-            docker pull "${IMG}:${SHA_SHORT}"
-            echo "TAG=${IMG}:${SHA_SHORT}" >> $GITHUB_ENV
-          fi
-
-      - name: Run container
-        env:
-          APP_PORT: "8080"                 # ปรับตามพอร์ตจริงใน container
-          HEALTH_PATH: "/actuator/health"  # ปรับเป็น /healthz หรืออื่น ๆ ได้
-        run: |
-          set -e
-          docker run -d --rm -p 8080:8080 --name app-under-test "${TAG}"
-          echo "Container started. Waiting for readiness..."
-
-      - name: Smoke check (health endpoint with retry)
-        env:
-          HEALTH_PATH: "/actuator/health"
-        shell: bash
-        run: |
-          set -e
-          for i in {1..24}; do
-            echo "Try #$i: GET ${HEALTH_PATH}"
-            # ยิงแล้วเก็บ status code (ไม่ fail ทันที)
-            STATUS=$(curl -s -o /tmp/health.json -w "%{http_code}" "http://localhost:8080${HEALTH_PATH}" || true)
-            cat /tmp/health.json || true
-
-            # 200 พร้อม "UP" = ผ่าน
-            if [ "$STATUS" = "200" ] && grep -qi '"status":"UP"' /tmp/health.json 2>/dev/null; then
-              echo "✔ Health is UP (200)"
-              exit 0
-            fi
-
-            # 401/403 = แอปขึ้นและมี security (ยอมให้ผ่านสำหรับ smoke)
-            if [ "$STATUS" = "401" ] || [ "$STATUS" = "403" ]; then
-              echo "✔ App is up but protected (${STATUS}). Treating as PASS for smoke."
-              exit 0
-            fi
-
-            echo "Status=${STATUS}. Retrying..."
-            sleep 5
-          done
-          echo "❌ Smoke check failed"
-          docker logs app-under-test || true
-          exit 1
-
-      - name: Stop container
-        if: always()
-        run: docker stop app-under-test || true
