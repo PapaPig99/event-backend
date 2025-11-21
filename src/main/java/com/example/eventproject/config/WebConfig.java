@@ -18,7 +18,7 @@ public class WebConfig implements WebMvcConfigurer {
         String abs = Paths.get(uploadDir).toAbsolutePath().normalize().toString();
         String location = "file:" + (abs.endsWith("/") ? abs : abs + "/"); // ต้องมี "file:" และ "/" ปิดท้าย
         registry.addResourceHandler("/images/**")
-                .addResourceLocations(location);
+                .addResourceLocations("file:/app/images/");
     }
 }
 
